@@ -1,0 +1,79 @@
+.app-frame {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
+  background: var(--color-background);
+}
+
+.app-content {
+  width: 100%;
+  max-width: var(--content-max);
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  align-self: center;
+}
+
+.app-content > * { width: 100%; }
+
+.offline-banner {
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) max(var(--space-4), env(safe-area-inset-left));
+  background: rgb(244 201 93 / 12%);
+  color: var(--color-warning);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.bottom-navigation {
+  width: 100%;
+  max-width: var(--content-max);
+  min-height: calc(4rem + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-self: center;
+  padding: var(--space-2) max(var(--space-3), env(safe-area-inset-right)) env(safe-area-inset-bottom) max(var(--space-3), env(safe-area-inset-left));
+  border-top: 1px solid var(--color-border);
+  background: rgb(13 13 13 / 94%);
+  backdrop-filter: blur(18px);
+}
+
+.bottom-navigation__item {
+  min-height: var(--touch-target);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+  color: var(--color-text-faint);
+  font-family: var(--font-mono);
+  font-size: .5625rem;
+  letter-spacing: .04em;
+  text-decoration: none;
+  transition: color var(--motion-fast), background var(--motion-fast);
+}
+
+.bottom-navigation__item--active { color: var(--color-accent); }
+.bottom-navigation__item:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+
+@media (min-width: 48rem) {
+  .app-frame {
+    max-width: 70rem;
+    min-height: calc(100svh - 3rem);
+    margin-block: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 32px 100px rgb(0 0 0 / 65%);
+    overflow: hidden;
+  }
+
+  .app-frame--focused { max-width: var(--content-max); }
+  .bottom-navigation { border-inline: 1px solid var(--color-border); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+}

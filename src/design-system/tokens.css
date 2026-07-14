@@ -1,0 +1,103 @@
+@font-face {
+  font-family: 'DM Sans Local';
+  src: url('../assets/fonts/dm-sans-variable.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 1000;
+}
+
+@font-face {
+  font-family: 'DM Mono Local';
+  src: url('../assets/fonts/dm-mono-regular.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'DM Mono Local';
+  src: url('../assets/fonts/dm-mono-medium.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed Local';
+  src: url('../assets/fonts/barlow-condensed-regular.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed Local';
+  src: url('../assets/fonts/barlow-condensed-semibold.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed Local';
+  src: url('../assets/fonts/barlow-condensed-bold.ttf') format('truetype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+:root {
+  --color-canvas: #030303;
+  --color-background: #0d0d0d;
+  --color-surface: #161616;
+  --color-surface-raised: #1a1a1a;
+  --color-surface-muted: #1e1e1e;
+  --color-text: #f0f0f0;
+  --color-text-muted: #8a8a8a;
+  --color-text-faint: #555;
+  --color-accent: #c0ff00;
+  --color-on-accent: #0a0a0a;
+  --color-danger: #ef6a6a;
+  --color-danger-muted: rgb(239 106 106 / 12%);
+  --color-warning: #f4c95d;
+  --color-border: rgb(255 255 255 / 8%);
+  --color-border-strong: rgb(255 255 255 / 16%);
+  --color-focus: rgb(192 255 0 / 55%);
+
+  --font-body: 'DM Sans Local', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Barlow Condensed Local', 'Arial Narrow', sans-serif;
+  --font-mono: 'DM Mono Local', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-display: clamp(2.25rem, 10vw, 3.5rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  --radius-sm: 0.625rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-round: 999px;
+
+  --shadow-accent: 0 0 28px rgb(192 255 0 / 13%);
+  --content-max: 42rem;
+  --touch-target: 2.75rem;
+  --motion-fast: 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+  }
+}

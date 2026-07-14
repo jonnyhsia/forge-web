@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
 import { startNetworkMonitor, useForgeStore } from '../store'
+import { AppShell } from './AppShell'
 
 export function AppBootstrap() {
   const initialize = useForgeStore((state) => state.initialize)
@@ -10,5 +10,5 @@ export function AppBootstrap() {
     return startNetworkMonitor()
   }, [initialize])
 
-  return <Outlet />
+  return <AppShell />
 }

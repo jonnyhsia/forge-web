@@ -1,14 +1,26 @@
-import { defineConfig } from 'vite'
+import { copyFile } from 'node:fs/promises'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const base = process.env.VITE_BASE_PATH ?? '/'
+
+function githubPagesSpaFallback(): Plugin {
+  return {
+    name: 'github-pages-spa-fallback',
+    apply: 'build',
+    async closeBundle() {
+      await copyFile('dist/index.html', 'dist/404.html')
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   base,
   plugins: [
     react(),
+    githubPagesSpaFallback(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg', 'pwa-icon.svg'],
@@ -31,7 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,ttf,woff,woff2}'],
       },
       devOptions: {
         enabled: true,
