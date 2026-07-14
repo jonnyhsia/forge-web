@@ -119,6 +119,7 @@ export interface WorkoutExerciseResult {
   exercise: ExerciseSnapshot
   position: number
   target: ExerciseTarget
+  restSeconds?: number
   sets: WorkoutSetResult[]
 }
 
@@ -130,6 +131,7 @@ export type WorkoutSessionStatus =
   | 'cancelled'
 
 export interface WorkoutTimerState {
+  phase: 'exercise' | 'rest'
   exerciseResultId: EntityId
   setNumber: number
   targetSeconds: number

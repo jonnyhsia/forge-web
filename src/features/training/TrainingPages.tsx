@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   useBlocker,
   useNavigate,
@@ -12,6 +12,10 @@ import { Icon } from '../../ui/Icon'
 import { Button, Card, Dialog, Progress, StatePanel } from '../../ui/primitives'
 import {
   createTrainingUiAdapter,
+  type DurationSetInput,
+  type DurationTrainingView,
+  type RestTrainingView,
+  type UnavailableTrainingView,
   type RepetitionTrainingView,
   type TrainingDecision,
   type TrainingUiAdapter,
@@ -42,6 +46,8 @@ function createStoreTrainingAdapter(): TrainingUiAdapter {
         useForgeStore
           .getState()
           .completeWorkoutSet(command, idempotencyKey),
+      saveTimer: (sessionId, timer) =>
+        useForgeStore.getState().saveWorkoutTimer(sessionId, timer),
     },
   })
 }
@@ -221,6 +227,10 @@ export function TrainingSessionPage() {
           onResume={() => void leaveAfterDecision('resume')}
           view={view}
         />
+      ) : view.kind === 'duration' ? (
+        <DurationWorkout adapter={adapter} key={`${view.kind}:${view.exerciseResultId}:${view.activeSetNumber}:${view.sessionStatus}`} onChange={setView} onResume={() => void leaveAfterDecision('resume')} resumeError={decisionError} view={view} />
+      ) : view.kind === 'rest' ? (
+        <RestWorkout adapter={adapter} key={`${view.kind}:${view.exerciseResultId}:${view.activeSetNumber}:${view.sessionStatus}`} onChange={setView} onResume={() => void leaveAfterDecision('resume')} resumeError={decisionError} view={view} />
       ) : (
         <UnavailableWorkout view={view} />
       )}
@@ -267,6 +277,73 @@ export function TrainingSessionPage() {
       </Dialog>
     </div>
   )
+}
+
+function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { adapter: TrainingUiAdapter; view: DurationTrainingView; onChange: (view: TrainingView) => void; onResume: () => void; resumeError: string | null }) {
+  const [current, setCurrent] = useState(view)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const interval = window.setInterval(() => setCurrent((previous) => adapter.refreshTimer(previous) as DurationTrainingView), 250)
+    return () => window.clearInterval(interval)
+  }, [adapter])
+  const complete = async () => {
+    if (current.elapsedSeconds <= 0) return
+    if (!current.targetReached && !window.confirm('提前结束并记录当前实际时长？')) return
+    setPending(true)
+    setError(null)
+    try {
+      onChange(await adapter.completeCurrentSet(current, { durationSeconds: current.elapsedSeconds } satisfies DurationSetInput))
+    } catch (cause) {
+      setError(toDataError(cause).message)
+    } finally {
+      setPending(false)
+    }
+  }
+  return (
+    <TimerWorkoutShell current={current} label="实际时长">
+      <Button disabled={pending || current.elapsedSeconds <= 0} fullWidth onClick={() => void complete()}>{pending ? '正在保存…' : current.targetReached ? '完成本组' : '提前结束并记录'}</Button>
+      {error ? <p className="training-submit-error" role="alert">保存失败，请重试。{error}</p> : null}
+      {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
+    </TimerWorkoutShell>
+  )
+}
+
+function RestWorkout({ adapter, view, onChange, onResume, resumeError }: { adapter: TrainingUiAdapter; view: RestTrainingView; onChange: (view: TrainingView) => void; onResume: () => void; resumeError: string | null }) {
+  const [current, setCurrent] = useState(view)
+  const [pending, setPending] = useState(false)
+  useEffect(() => {
+    const interval = window.setInterval(() => setCurrent((previous) => adapter.refreshTimer(previous) as RestTrainingView), 250)
+    return () => window.clearInterval(interval)
+  }, [adapter])
+  const finish = async () => {
+    setPending(true)
+    try { onChange(await adapter.finishRest(current)) } finally { setPending(false) }
+  }
+  return (
+    <TimerWorkoutShell current={current} label={current.targetReached ? '休息完成' : '剩余时间'}>
+      <Button disabled={pending} fullWidth onClick={() => void finish()}>{pending ? '正在保存…' : current.targetReached ? '继续下一组' : '跳过休息'}</Button>
+      {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
+    </TimerWorkoutShell>
+  )
+}
+
+function TimerWorkoutShell({ current, label, children }: { current: DurationTrainingView | RestTrainingView; label: string; children: ReactNode }) {
+  return (
+    <main className="training-content training-timer-content">
+      <section className="training-exercise-heading"><p>{current.kind === 'rest' ? '组间休息' : '当前动作'}</p><h1>{current.exerciseName}</h1><span>第 {current.activeSetNumber} 组 / 共 {current.targetSets} 组</span></section>
+      <Card className="training-timer-card"><small>{label}</small><strong>{formatDuration(current.kind === 'rest' ? current.remainingSeconds : current.elapsedSeconds)}</strong><span>目标 {formatDuration(current.targetSeconds)}</span>{current.targetReached && current.kind === 'duration' ? <em>已达到目标{current.overtimeSeconds ? `，超出 ${formatDuration(current.overtimeSeconds)}` : ''}</em> : null}</Card>
+      {children}
+    </main>
+  )
+}
+
+function PausedOverlay({ error, onResume }: { error: string | null; onResume: () => void }) {
+  return <div className="training-paused" role="status"><Card><h2>训练已暂停</h2><p>进度已保存，继续后可恢复计时。</p>{error ? <p className="training-submit-error" role="alert">恢复失败，请重试。{error}</p> : null}<Button fullWidth onClick={onResume}>继续训练</Button></Card></div>
+}
+
+function formatDuration(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 function TrainingHeader({
@@ -463,7 +540,7 @@ function NumberControl({
   )
 }
 
-function UnavailableWorkout({ view }: { view: Exclude<TrainingView, RepetitionTrainingView> }) {
+function UnavailableWorkout({ view }: { view: UnavailableTrainingView }) {
   const content =
     view.reason === 'duration'
       ? {

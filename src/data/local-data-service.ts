@@ -7,6 +7,7 @@ import type {
   StatisticsCache,
   TrainingPlan,
   WorkoutSession,
+  WorkoutTimerState,
 } from '../domain/entities'
 import { createEntityId, nowIso } from '../domain/factories'
 import { DataError, type DataErrorCode } from './errors'
@@ -246,6 +247,7 @@ export class LocalDataService {
               },
               position: planExercise.position,
               target: planExercise.target,
+              restSeconds: planExercise.restSeconds,
               sets: [],
             }
           })
@@ -344,6 +346,60 @@ export class LocalDataService {
       }
       if (error instanceof InvalidWorkoutTransitionError) {
         throw new DataError('invalid_transition', error.message)
+      }
+      throw error
+    }
+  }
+
+  async saveWorkoutTimerState(
+    sessionId: string,
+    timer: WorkoutTimerState | undefined,
+    dependencies: WorkoutRuntimeDependencies = {
+      createId: createEntityId,
+      now: nowIso,
+    },
+  ): Promise<WorkoutSession> {
+    try {
+      return await this.database.transaction(
+        'rw',
+        [this.database.workoutSessions, this.database.syncQueue],
+        async () => {
+          const current = await this.database.workoutSessions.get(sessionId)
+          if (!current || current.deletedAt) {
+            throw new WorkoutMutationError(
+              'not_found',
+              `Workout session ${sessionId} was not found`,
+            )
+          }
+          if (!['active', 'paused'].includes(current.status)) {
+            throw new WorkoutMutationError(
+              'invalid_transition',
+              `Workout session ${sessionId} cannot save a timer`,
+            )
+          }
+          const session = {
+            ...current,
+            timer,
+            updatedAt: dependencies.now(),
+            sync: { ...current.sync, status: 'pending' as const, error: undefined },
+          }
+          await this.database.workoutSessions.put(session)
+          await this.queueRepository.putLatest(
+            createSyncQueueItem({
+              entityType: 'workout-session',
+              entityId: session.id,
+              operation: 'upsert',
+              payload: session,
+              priority: SYNC_PRIORITY.workoutSession,
+              idempotencyKey: session.idempotencyKey,
+            }),
+          )
+          return session
+        },
+      )
+    } catch (error) {
+      if (error instanceof WorkoutMutationError) {
+        throw new DataError(error.code, error.message)
       }
       throw error
     }

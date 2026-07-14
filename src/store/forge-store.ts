@@ -22,6 +22,7 @@ import type {
   WorkoutTransitionCommand,
   CompleteWorkoutSetCommand,
   CompleteWorkoutSetOutcome,
+  WorkoutTimerState,
 } from '../domain'
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -89,6 +90,10 @@ export interface ForgeState {
     command: CompleteWorkoutSetCommand,
     idempotencyKey: string,
   ) => Promise<CompleteWorkoutSetOutcome>
+  saveWorkoutTimer: (
+    sessionId: EntityId,
+    timer: WorkoutTimerState | undefined,
+  ) => Promise<WorkoutSession>
   loadStatistics: () => Promise<void>
   saveStatistics: (cache: StatisticsCache) => Promise<void>
   loadSettings: () => Promise<void>
@@ -462,6 +467,19 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
             error: dataError,
           },
         })
+        throw dataError
+      }
+    },
+
+    saveWorkoutTimer: async (sessionId, timer) => {
+      try {
+        const session = await dependencies.data.workouts.saveTimer(sessionId, timer)
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({ pendingSyncCount, workouts: { value: session, status: 'ready', error: null } })
+        return session
+      } catch (error) {
+        const dataError = toDataError(error)
+        set({ workouts: { ...get().workouts, status: 'error', error: dataError } })
         throw dataError
       }
     },

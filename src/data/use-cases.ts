@@ -10,6 +10,7 @@ import {
   type WorkoutTransitionCommand,
   type CompleteWorkoutSetCommand,
   type CompleteWorkoutSetOutcome,
+  type WorkoutTimerState,
 } from '../domain'
 import { DEFAULT_APP_SETTINGS, type ForgeDatabase } from './database'
 import { DataError, toDataError } from './errors'
@@ -58,6 +59,10 @@ export interface WorkoutsUseCases {
     command: CompleteWorkoutSetCommand,
     idempotencyKey: string,
   ): Promise<CompleteWorkoutSetOutcome>
+  saveTimer(
+    sessionId: EntityId,
+    timer: WorkoutTimerState | undefined,
+  ): Promise<WorkoutSession>
 }
 
 export interface HistoryUseCases {
@@ -263,6 +268,13 @@ class LocalWorkoutsUseCases implements WorkoutsUseCases {
     } catch (error) {
       throw toDataError(error)
     }
+  }
+
+  saveTimer(
+    sessionId: EntityId,
+    timer: WorkoutTimerState | undefined,
+  ): Promise<WorkoutSession> {
+    return this.localData.saveWorkoutTimerState(sessionId, timer, this.runtime)
   }
 }
 

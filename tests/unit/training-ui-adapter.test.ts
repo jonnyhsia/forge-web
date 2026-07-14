@@ -159,3 +159,67 @@ describe('次数型训练 UI adapter', () => {
     )
   })
 })
+
+describe('时间型与休息训练 UI adapter', () => {
+  function durationSession(overrides: Partial<WorkoutSession> = {}): WorkoutSession {
+    return {
+      ...repetitionSession(),
+      exercises: [{
+        ...repetitionSession().exercises[0]!,
+        exercise: { exerciseId: 'exercise-duration', name: '平板支撑', type: 'duration' },
+        target: { type: 'duration', targetSets: 2, targetSeconds: 10 },
+        restSeconds: 5,
+        sets: [],
+      }],
+      activeExerciseResultId: 'result-1',
+      activeSetNumber: 1,
+      ...overrides,
+    }
+  }
+
+  it('刷新时按持久化绝对时间恢复时间型动作，并在提前结束后进入休息计时', async () => {
+    const session = durationSession()
+    let persisted = session
+    const adapter = createTrainingUiAdapter({
+      createId: () => 'timer-id',
+      now: () => '2026-07-14T08:00:00.000Z',
+      gateway: {
+        start: vi.fn().mockResolvedValue(session),
+        get: vi.fn().mockImplementation(async () => persisted),
+        transition: vi.fn().mockResolvedValue(session),
+        completeSet: vi.fn().mockImplementation(async () => {
+          persisted = {
+            ...session,
+            activeSetNumber: 2,
+            timer: {
+              phase: 'rest',
+              exerciseResultId: 'result-1',
+              setNumber: 1,
+              targetSeconds: 5,
+              segmentStartedAt: '2026-07-14T08:00:08.000Z',
+              accumulatedSeconds: 0,
+              status: 'running',
+            },
+          }
+          return { session: persisted, set: persisted.exercises[0]!.sets[0]! }
+        }),
+        saveTimer: vi.fn().mockImplementation(async (_id, timer) => {
+          persisted = { ...persisted, timer }
+          return persisted
+        }),
+      },
+    })
+
+    const view = await adapter.open({ type: 'resume', sessionId: session.id })
+    expect(view).toMatchObject({ kind: 'duration', elapsedSeconds: 0, targetSeconds: 10 })
+    if (view.kind !== 'duration') throw new Error('Expected duration view')
+    expect(adapter.refreshTimer(view, '2026-07-14T08:00:12.000Z')).toMatchObject({
+      elapsedSeconds: 12,
+      targetReached: true,
+      overtimeSeconds: 2,
+    })
+
+    const rest = await adapter.completeCurrentSet(view, { durationSeconds: 8 })
+    expect(rest).toMatchObject({ kind: 'rest', targetSeconds: 5, elapsedSeconds: 0 })
+  })
+})

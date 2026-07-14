@@ -242,6 +242,46 @@ describe('data use cases', () => {
     }
   })
 
+  it('persists timer state and freezes accumulated time while paused', async () => {
+    const database = new ForgeDatabase('forge-t08-persist-timer')
+    let currentTime = '2026-07-14T08:00:00.000Z'
+    const useCases = createForgeDataUseCases(database, {
+      createId: () => 'timer-id',
+      now: () => currentTime,
+    })
+    const active = {
+      ...workoutSession('session-a', 'active', timestamp),
+      activeExerciseResultId: 'exercise-result-a',
+      activeSetNumber: 1,
+    }
+
+    try {
+      await database.workoutSessions.put(active)
+      const timer = {
+        phase: 'exercise' as const,
+        exerciseResultId: 'exercise-result-a',
+        setNumber: 1,
+        targetSeconds: 60,
+        segmentStartedAt: timestamp,
+        accumulatedSeconds: 4,
+        status: 'running' as const,
+      }
+      currentTime = '2026-07-14T08:00:10.000Z'
+      const saved = await useCases.workouts.saveTimer('session-a', timer)
+      currentTime = '2026-07-14T08:00:15.000Z'
+      const paused = await useCases.workouts.transition('session-a', { type: 'pause' })
+
+      expect(saved.timer).toEqual(timer)
+      expect(paused.timer).toMatchObject({ accumulatedSeconds: 19, status: 'paused' })
+      currentTime = '2026-07-14T08:10:00.000Z'
+      await expect(useCases.workouts.get('session-a')).resolves.toMatchObject({
+        timer: { accumulatedSeconds: 19, status: 'paused' },
+      })
+    } finally {
+      database.close()
+    }
+  })
+
   it('rejects an illegal workout transition without changing the session', async () => {
     const database = new ForgeDatabase('forge-t06-invalid-workout-transition')
     const useCases = createForgeDataUseCases(database, {
@@ -279,6 +319,7 @@ describe('data use cases', () => {
       activeExerciseResultId: 'exercise-result-a',
       activeSetNumber: 1,
       timer: {
+        phase: 'exercise' as const,
         exerciseResultId: 'exercise-result-a',
         setNumber: 1,
         targetSeconds: 60,

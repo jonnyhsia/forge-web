@@ -3,6 +3,7 @@ import type {
   WorkoutSession,
   WorkoutSetResult,
 } from './entities'
+import { createTimerController } from './timer-controller'
 
 export type WorkoutTransitionCommand =
   | { type: 'start' }
@@ -116,6 +117,20 @@ export function completeWorkoutSet(
     activeExerciseResultId: progress?.exerciseResultId,
     activeSetNumber: progress?.setNumber,
   }
+  if (
+    progress &&
+    progress.exerciseResultId === exercise.id &&
+    exercise.restSeconds &&
+    exercise.restSeconds > 0
+  ) {
+    advanced.timer = createTimerController().start({
+      phase: 'rest',
+      exerciseResultId: exercise.id,
+      setNumber: command.setNumber,
+      targetSeconds: exercise.restSeconds,
+      startedAt: metadata.completedAt,
+    })
+  }
   return { session: advanced, set }
 }
 
@@ -185,10 +200,24 @@ export function transitionWorkout(
     }
   }
   if (command.type === 'pause' && session.status === 'active') {
-    return { ...session, status: 'paused', updatedAt: timestamp }
+    return {
+      ...session,
+      status: 'paused',
+      timer: session.timer
+        ? createTimerController().pause(session.timer, timestamp)
+        : undefined,
+      updatedAt: timestamp,
+    }
   }
   if (command.type === 'resume' && session.status === 'paused') {
-    return { ...session, status: 'active', updatedAt: timestamp }
+    return {
+      ...session,
+      status: 'active',
+      timer: session.timer
+        ? createTimerController().resume(session.timer, timestamp)
+        : undefined,
+      updatedAt: timestamp,
+    }
   }
   if (
     command.type === 'cancel' &&
