@@ -1,10 +1,12 @@
-import type {
-  AppSettings,
-  EntityId,
-  PlanExercise,
-  StatisticsCache,
-  TrainingPlan,
-  WorkoutSession,
+import {
+  nowIso,
+  type AppSettings,
+  type EntityId,
+  type Exercise,
+  type PlanExercise,
+  type StatisticsCache,
+  type TrainingPlan,
+  type WorkoutSession,
 } from '../domain'
 import { DEFAULT_APP_SETTINGS, type ForgeDatabase } from './database'
 import { DataError, toDataError } from './errors'
@@ -21,13 +23,20 @@ import { SyncQueueRepository } from './sync/sync-queue'
 
 export interface PlanAggregate {
   plan: TrainingPlan
-  exercises: PlanExercise[]
+  exercises: PlanExerciseAggregate[]
+}
+
+export interface PlanExerciseAggregate {
+  exercise: Exercise
+  planExercise: PlanExercise
 }
 
 export interface PlansUseCases {
   listPage(request?: PageRequest<PlansFilter>): Promise<Page<TrainingPlan>>
   get(planId: EntityId): Promise<PlanAggregate>
   save(input: PlanAggregate): Promise<PlanAggregate>
+  archive(planId: EntityId): Promise<PlanAggregate>
+  delete(planId: EntityId): Promise<void>
 }
 
 export interface WorkoutsUseCases {
@@ -88,14 +97,27 @@ class LocalPlansUseCases implements PlansUseCases {
         throw new DataError('not_found', `Training plan ${planId} was not found`)
       }
 
-      const exercises = await this.database.planExercises
+      const planExercises = await this.database.planExercises
         .where('planId')
         .equals(planId)
         .sortBy('position')
+      const visiblePlanExercises = planExercises.filter((item) => !item.deletedAt)
+      const exercises = await this.database.exercises.bulkGet(
+        visiblePlanExercises.map((item) => item.exerciseId),
+      )
 
       return {
         plan,
-        exercises: exercises.filter((item) => !item.deletedAt),
+        exercises: visiblePlanExercises.map((planExercise, index) => {
+          const exercise = exercises[index]
+          if (!exercise || exercise.deletedAt) {
+            throw new DataError(
+              'not_found',
+              `Exercise ${planExercise.exerciseId} was not found`,
+            )
+          }
+          return { exercise, planExercise }
+        }),
       }
     } catch (error) {
       throw toDataError(error)
@@ -106,6 +128,33 @@ class LocalPlansUseCases implements PlansUseCases {
     try {
       await this.localData.saveTrainingPlan(input.plan, input.exercises)
       return await this.get(input.plan.id)
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+
+  async archive(planId: EntityId): Promise<PlanAggregate> {
+    try {
+      const aggregate = await this.get(planId)
+      return await this.save({
+        ...aggregate,
+        plan: { ...aggregate.plan, status: 'archived' },
+      })
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+
+  async delete(planId: EntityId): Promise<void> {
+    try {
+      const aggregate = await this.get(planId)
+      await this.localData.saveTrainingPlan(
+        {
+          ...aggregate.plan,
+          deletedAt: nowIso(),
+        },
+        aggregate.exercises,
+      )
     } catch (error) {
       throw toDataError(error)
     }

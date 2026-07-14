@@ -9,6 +9,7 @@ import type {
   WorkoutSession,
 } from '../domain/entities'
 import { nowIso } from '../domain/factories'
+import { DataError } from './errors'
 import {
   SYNC_PRIORITY,
   type SyncEntityType,
@@ -19,6 +20,8 @@ import {
   SyncQueueRepository,
   syncQueueRepository,
 } from './sync/sync-queue'
+
+class ActiveSessionExistsError extends Error {}
 
 function pendingEntity<TEntity extends BaseEntity>(entity: TEntity): TEntity {
   return {
@@ -59,37 +62,69 @@ export class LocalDataService {
 
   async saveTrainingPlan(
     plan: TrainingPlan,
-    exercises: PlanExercise[],
+    items: Array<{ exercise: Exercise; planExercise: PlanExercise }>,
   ): Promise<TrainingPlan> {
     const pendingPlan = pendingEntity(plan)
-    const pendingExercises = exercises.map((exercise) =>
-      pendingEntity(exercise),
+    const pendingExercises = items.map(({ exercise }) => pendingEntity(exercise))
+    const pendingPlanExercises = items.map(({ planExercise }) =>
+      pendingEntity(planExercise),
     )
     const queueItem = createSyncQueueItem({
       entityType: 'training-plan',
       entityId: plan.id,
       operation: plan.deletedAt ? 'delete' : 'upsert',
-      payload: { plan: pendingPlan, exercises: pendingExercises },
+      payload: {
+        plan: pendingPlan,
+        exercises: pendingExercises,
+        planExercises: pendingPlanExercises,
+      },
       priority: SYNC_PRIORITY.trainingPlan,
     })
 
-    await this.database.transaction(
-      'rw',
-      [
-        this.database.trainingPlans,
-        this.database.planExercises,
-        this.database.syncQueue,
-      ],
-      async () => {
-        await this.database.trainingPlans.put(pendingPlan)
-        await this.database.planExercises
-          .where('planId')
-          .equals(plan.id)
-          .delete()
-        await this.database.planExercises.bulkPut(pendingExercises)
-        await this.queueRepository.putLatest(queueItem)
-      },
-    )
+    try {
+      await this.database.transaction(
+        'rw',
+        [
+          this.database.trainingPlans,
+          this.database.exercises,
+          this.database.planExercises,
+          this.database.workoutSessions,
+          this.database.syncQueue,
+        ],
+        async () => {
+          if (pendingPlan.status === 'archived' || pendingPlan.deletedAt) {
+            const activeSession = await this.database.workoutSessions
+              .where('planId')
+              .equals(plan.id)
+              .filter(
+                (session) =>
+                  !session.deletedAt &&
+                  ['draft', 'active', 'paused'].includes(session.status),
+              )
+              .first()
+
+            if (activeSession) throw new ActiveSessionExistsError()
+          }
+
+          await this.database.trainingPlans.put(pendingPlan)
+          await this.database.exercises.bulkPut(pendingExercises)
+          await this.database.planExercises
+            .where('planId')
+            .equals(plan.id)
+            .delete()
+          await this.database.planExercises.bulkPut(pendingPlanExercises)
+          await this.queueRepository.putLatest(queueItem)
+        },
+      )
+    } catch (error) {
+      if (error instanceof ActiveSessionExistsError) {
+        throw new DataError(
+          'active_session_exists',
+          `Training plan ${plan.id} has an active workout session`,
+        )
+      }
+      throw error
+    }
 
     return pendingPlan
   }

@@ -268,6 +268,56 @@ describe('feature store', () => {
     }
   })
 
+  it('archives a plan and refreshes only the plans slice', async () => {
+    const database = new ForgeDatabase('forge-t031-archive-plan-store')
+    const store = createForgeStore({
+      initialize: () => database.open().then(() => undefined),
+      data: createForgeDataUseCases(database),
+      countPendingSync: () => database.syncQueue.count(),
+    })
+
+    try {
+      await database.trainingPlans.put(plan('plan-a', timestamp))
+      await store.getState().loadHistory({ reset: true })
+      const historyBefore = store.getState().history
+
+      await store.getState().archivePlan('plan-a')
+
+      expect(store.getState().plans).toMatchObject({
+        status: 'ready',
+        items: [],
+      })
+      expect(store.getState().pendingSyncCount).toBe(1)
+      expect(store.getState().history).toBe(historyBefore)
+    } finally {
+      database.close()
+    }
+  })
+
+  it('deletes a plan and removes it from the plans slice', async () => {
+    const database = new ForgeDatabase('forge-t031-delete-plan-store')
+    const store = createForgeStore({
+      initialize: () => database.open().then(() => undefined),
+      data: createForgeDataUseCases(database),
+      countPendingSync: () => database.syncQueue.count(),
+    })
+
+    try {
+      await database.trainingPlans.put(plan('plan-a', timestamp))
+      await store.getState().loadPlans({ reset: true })
+
+      await store.getState().deletePlan('plan-a')
+
+      expect(store.getState().plans).toMatchObject({
+        status: 'ready',
+        items: [],
+      })
+      expect(store.getState().pendingSyncCount).toBe(1)
+    } finally {
+      database.close()
+    }
+  })
+
   it('refreshes workout and history after saving a completed workout', async () => {
     const database = new ForgeDatabase('forge-t03-save-workout-store')
     const store = createForgeStore({

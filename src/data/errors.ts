@@ -4,6 +4,7 @@ export type DataErrorCode =
   | 'invalid_transition'
   | 'duplicate'
   | 'conflict'
+  | 'active_session_exists'
   | 'storage_unavailable'
   | 'transport_unavailable'
   | 'unknown'

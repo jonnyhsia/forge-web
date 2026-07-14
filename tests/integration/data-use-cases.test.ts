@@ -108,8 +108,14 @@ describe('data use cases', () => {
       await expect(useCases.plans.get('plan-a')).resolves.toEqual({
         plan: trainingPlan(),
         exercises: [
-          planExercise('plan-exercise-a', 0),
-          planExercise('plan-exercise-b', 1),
+          {
+            exercise: exercise(),
+            planExercise: planExercise('plan-exercise-a', 0),
+          },
+          {
+            exercise: exercise(),
+            planExercise: planExercise('plan-exercise-b', 1),
+          },
         ],
       })
       await expect(useCases.plans.get('missing')).rejects.toMatchObject({
@@ -216,18 +222,107 @@ describe('data use cases', () => {
     const useCases = createForgeDataUseCases(database)
     const input = {
       plan: trainingPlan(),
-      exercises: [planExercise('plan-exercise-a', 0)],
+      exercises: [
+        {
+          exercise: exercise(),
+          planExercise: planExercise('plan-exercise-a', 0),
+        },
+      ],
     }
 
     try {
       await expect(useCases.plans.save(input)).resolves.toMatchObject({
         plan: { id: 'plan-a', sync: { status: 'pending' } },
-        exercises: [{ id: 'plan-exercise-a', sync: { status: 'pending' } }],
+        exercises: [
+          {
+            exercise: { id: 'exercise-a', sync: { status: 'pending' } },
+            planExercise: {
+              id: 'plan-exercise-a',
+              sync: { status: 'pending' },
+            },
+          },
+        ],
       })
       await expect(useCases.plans.get('plan-a')).resolves.toMatchObject({
         plan: { id: 'plan-a' },
-        exercises: [{ id: 'plan-exercise-a' }],
+        exercises: [
+          {
+            exercise: { id: 'exercise-a' },
+            planExercise: { id: 'plan-exercise-a' },
+          },
+        ],
       })
+    } finally {
+      database.close()
+    }
+  })
+
+  it('archives a plan through the plans interface and removes it from the default list', async () => {
+    const database = new ForgeDatabase('forge-t031-archive-plan')
+    const useCases = createForgeDataUseCases(database)
+
+    try {
+      await database.trainingPlans.put(trainingPlan())
+      await database.exercises.put(exercise())
+      await database.planExercises.put(planExercise('plan-exercise-a', 0))
+
+      await expect(useCases.plans.archive('plan-a')).resolves.toMatchObject({
+        plan: { id: 'plan-a', status: 'archived', sync: { status: 'pending' } },
+      })
+      await expect(useCases.plans.listPage()).resolves.toMatchObject({ items: [] })
+    } finally {
+      database.close()
+    }
+  })
+
+  it('deletes a plan as a tombstone and enqueues a delete mutation', async () => {
+    const database = new ForgeDatabase('forge-t031-delete-plan')
+    const useCases = createForgeDataUseCases(database)
+
+    try {
+      await database.trainingPlans.put(trainingPlan())
+      await database.exercises.put(exercise())
+      await database.planExercises.put(planExercise('plan-exercise-a', 0))
+
+      await expect(useCases.plans.delete('plan-a')).resolves.toBeUndefined()
+      await expect(database.trainingPlans.get('plan-a')).resolves.toMatchObject({
+        deletedAt: expect.any(String),
+        sync: { status: 'pending' },
+      })
+      await expect(database.syncQueue.toArray()).resolves.toEqual([
+        expect.objectContaining({
+          entityId: 'plan-a',
+          operation: 'delete',
+          status: 'pending',
+        }),
+      ])
+      await expect(useCases.plans.listPage()).resolves.toMatchObject({ items: [] })
+    } finally {
+      database.close()
+    }
+  })
+
+  it('blocks archive and delete while the plan has an active workout', async () => {
+    const database = new ForgeDatabase('forge-t031-active-session-guard')
+    const useCases = createForgeDataUseCases(database)
+
+    try {
+      await database.trainingPlans.put(trainingPlan())
+      await database.exercises.put(exercise())
+      await database.planExercises.put(planExercise('plan-exercise-a', 0))
+      await database.workoutSessions.put(
+        workoutSession('active-session', 'active', timestamp),
+      )
+
+      await expect(useCases.plans.archive('plan-a')).rejects.toMatchObject({
+        code: 'active_session_exists',
+      })
+      await expect(useCases.plans.delete('plan-a')).rejects.toMatchObject({
+        code: 'active_session_exists',
+      })
+      const storedPlan = await database.trainingPlans.get('plan-a')
+      expect(storedPlan?.status).toBe('active')
+      expect(storedPlan?.deletedAt).toBeUndefined()
     } finally {
       database.close()
     }

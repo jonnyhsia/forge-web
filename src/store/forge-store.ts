@@ -14,6 +14,7 @@ import {
 } from '../data'
 import type {
   AppSettings,
+  EntityId,
   StatisticsCache,
   TrainingPlan,
   WorkoutSession,
@@ -69,6 +70,8 @@ export interface ForgeState {
   setOnline: (online: boolean) => void
   loadPlans: (options?: LoadPlansOptions) => Promise<void>
   savePlan: (input: PlanAggregate) => Promise<void>
+  archivePlan: (planId: EntityId) => Promise<void>
+  deletePlan: (planId: EntityId) => Promise<void>
   loadHistory: (options?: LoadPageOptions) => Promise<void>
   loadWorkout: () => Promise<void>
   saveWorkout: (session: WorkoutSession) => Promise<void>
@@ -198,6 +201,44 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     savePlan: async (input) => {
       try {
         await dependencies.data.plans.save(input)
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({ pendingSyncCount })
+        await get().loadPlans({ reset: true })
+      } catch (error) {
+        const dataError = toDataError(error)
+        set({
+          plans: {
+            ...get().plans,
+            status: 'error',
+            error: dataError,
+          },
+        })
+        throw dataError
+      }
+    },
+
+    archivePlan: async (planId) => {
+      try {
+        await dependencies.data.plans.archive(planId)
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({ pendingSyncCount })
+        await get().loadPlans({ reset: true })
+      } catch (error) {
+        const dataError = toDataError(error)
+        set({
+          plans: {
+            ...get().plans,
+            status: 'error',
+            error: dataError,
+          },
+        })
+        throw dataError
+      }
+    },
+
+    deletePlan: async (planId) => {
+      try {
+        await dependencies.data.plans.delete(planId)
         const pendingSyncCount = await dependencies.countPendingSync()
         set({ pendingSyncCount })
         await get().loadPlans({ reset: true })
