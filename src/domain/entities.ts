@@ -4,6 +4,7 @@ export type IsoDateTime = string
 export type SyncStatus =
   | 'local'
   | 'pending'
+  | 'processing'
   | 'synced'
   | 'conflict'
   | 'failed'
@@ -25,6 +26,7 @@ export interface BaseEntity {
 
 export type ExerciseType = 'repetitions' | 'duration'
 export type ExerciseUnit = 'repetition' | 'second'
+export type WeightUnit = 'kg' | 'lb'
 
 export interface Exercise extends BaseEntity {
   name: string
@@ -33,25 +35,26 @@ export interface Exercise extends BaseEntity {
   notes?: string
 }
 
-export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6
-
-export interface TrainingSchedule {
-  weekdays: Weekday[]
-  time?: string
-  reminderEnabled: boolean
-}
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type PlanStatus = 'draft' | 'active' | 'archived'
+export type PlanCategory = 'strength' | 'cardio' | 'mobility'
+export const DEFAULT_PLAN_CATEGORY: PlanCategory = 'strength'
 
 export interface TrainingPlan extends BaseEntity {
   name: string
   description?: string
-  schedule?: TrainingSchedule
-  archivedAt?: IsoDateTime
+  status: PlanStatus
+  category: PlanCategory
+  weekdays: Weekday[]
+  localTime?: string
+  effectiveLocalDate: string
 }
 
 export interface RepetitionTarget {
   type: 'repetitions'
   targetRepetitions: number
   targetSets: number
+  weight: WeightValue
 }
 
 export interface DurationTarget {
@@ -61,6 +64,11 @@ export interface DurationTarget {
 }
 
 export type ExerciseTarget = RepetitionTarget | DurationTarget
+
+export type WeightValue =
+  | { mode: 'external'; value: number; unit: WeightUnit }
+  | { mode: 'bodyweight'; value?: never; unit?: never }
+  | { mode: 'bodyweight'; value: number; unit: WeightUnit }
 
 export interface PlanExercise extends BaseEntity {
   planId: EntityId
@@ -74,33 +82,42 @@ export interface ExerciseSnapshot {
   exerciseId: EntityId
   name: string
   type: ExerciseType
-  unit: ExerciseUnit
 }
 
-export interface RepetitionResult {
-  type: 'repetitions'
-  repetitions: number
-}
-
-export interface DurationResult {
-  type: 'duration'
-  durationSeconds: number
-}
-
-export type ExerciseResultValue = RepetitionResult | DurationResult
-
-export interface WorkoutSetResult {
+interface WorkoutSetResultMetadata {
   id: EntityId
   setNumber: number
-  completedAt?: IsoDateTime
-  value?: ExerciseResultValue
-  skipped: boolean
+  completedAt: IsoDateTime
+  idempotencyKey: string
 }
+
+export type WorkoutSetResult = WorkoutSetResultMetadata &
+  (
+    | {
+        skipped: true
+        repetitions?: never
+        durationSeconds?: never
+        weight?: never
+      }
+    | {
+        skipped: false
+        repetitions: number
+        durationSeconds?: never
+        weight: WeightValue
+      }
+    | {
+        skipped: false
+        repetitions?: never
+        durationSeconds: number
+        weight?: never
+      }
+  )
 
 export interface WorkoutExerciseResult {
   id: EntityId
-  planExerciseId?: EntityId
+  sourcePlanExerciseId: EntityId
   exercise: ExerciseSnapshot
+  position: number
   target: ExerciseTarget
   sets: WorkoutSetResult[]
 }
@@ -114,31 +131,42 @@ export type WorkoutSessionStatus =
 
 export interface WorkoutTimerState {
   exerciseResultId: EntityId
-  setId: EntityId
+  setNumber: number
   targetSeconds: number
-  startedAt: IsoDateTime
+  segmentStartedAt: IsoDateTime
   accumulatedSeconds: number
   status: 'running' | 'paused'
 }
 
 export interface WorkoutSession extends BaseEntity {
-  planId?: EntityId
-  planName?: string
+  planId: EntityId
+  scheduleOccurrenceKey: string
+  planName: string
   status: WorkoutSessionStatus
   startedAt?: IsoDateTime
   endedAt?: IsoDateTime
-  activeExerciseId?: EntityId
+  activeExerciseResultId?: EntityId
+  activeSetNumber?: number
   timer?: WorkoutTimerState
   exercises: WorkoutExerciseResult[]
   idempotencyKey: string
 }
 
 export type StatisticsScope = 'cached' | 'remote'
+export type StatisticsSource = 'history' | 'server'
+
+export interface PersonalRecord {
+  exerciseId: EntityId
+  exerciseName: string
+  weightKg: number
+  achievedAt: IsoDateTime
+}
 
 export interface StatisticsSummary {
   workoutCount: number
-  completedExerciseCount: number
-  totalDurationSeconds: number
+  streakDays: number
+  trainingVolumeKg: number
+  personalRecords: PersonalRecord[]
 }
 
 export interface StatisticsCache {
@@ -147,12 +175,20 @@ export interface StatisticsCache {
   rangeStart: IsoDateTime
   rangeEnd: IsoDateTime
   generatedAt: IsoDateTime
+  source: StatisticsSource
   summary: StatisticsSummary
 }
 
 export interface AppSettings {
   key: 'app'
-  notificationsEnabled: boolean
+  defaultWeightUnit: WeightUnit
+  trainingReminderEnabled: boolean
+  restReminderEnabled: boolean
   reminderLeadMinutes: number
+  notificationPermission:
+    | 'not_requested'
+    | 'granted'
+    | 'denied'
+    | 'unsupported'
   dataSchemaVersion: number
 }

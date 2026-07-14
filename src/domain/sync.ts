@@ -4,6 +4,7 @@ export type SyncEntityType =
   | 'exercise'
   | 'training-plan'
   | 'workout-session'
+  | 'statistics'
 
 export type SyncOperationType = 'upsert' | 'delete'
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed' | 'conflict'
