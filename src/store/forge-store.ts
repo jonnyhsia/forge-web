@@ -234,9 +234,15 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
 
     savePlan: async (input) => {
       try {
-        await dependencies.data.plans.save(input)
+        const value = await dependencies.data.plans.save(input)
         const pendingSyncCount = await dependencies.countPendingSync()
-        set({ pendingSyncCount })
+        set({
+          pendingSyncCount,
+          planDetails: {
+            ...get().planDetails,
+            [value.plan.id]: { value, status: 'ready', error: null },
+          },
+        })
         await get().loadPlans({ reset: true })
       } catch (error) {
         const dataError = toDataError(error)
@@ -253,9 +259,15 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
 
     archivePlan: async (planId) => {
       try {
-        await dependencies.data.plans.archive(planId)
+        const value = await dependencies.data.plans.archive(planId)
         const pendingSyncCount = await dependencies.countPendingSync()
-        set({ pendingSyncCount })
+        set({
+          pendingSyncCount,
+          planDetails: {
+            ...get().planDetails,
+            [planId]: { value, status: 'ready', error: null },
+          },
+        })
         await get().loadPlans({ reset: true })
       } catch (error) {
         const dataError = toDataError(error)
@@ -274,7 +286,9 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       try {
         await dependencies.data.plans.delete(planId)
         const pendingSyncCount = await dependencies.countPendingSync()
-        set({ pendingSyncCount })
+        const planDetails = { ...get().planDetails }
+        delete planDetails[planId]
+        set({ pendingSyncCount, planDetails })
         await get().loadPlans({ reset: true })
       } catch (error) {
         const dataError = toDataError(error)

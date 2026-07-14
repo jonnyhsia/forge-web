@@ -288,6 +288,10 @@ describe('feature store', () => {
         status: 'ready',
         items: [{ id: 'plan-a', sync: { status: 'pending' } }],
       })
+      expect(store.getState().planDetails['plan-a']).toMatchObject({
+        status: 'ready',
+        value: { plan: { id: 'plan-a' } },
+      })
       expect(store.getState().pendingSyncCount).toBe(1)
       expect(store.getState().history).toBe(historyBefore)
     } finally {
@@ -316,6 +320,10 @@ describe('feature store', () => {
       })
       expect(store.getState().pendingSyncCount).toBe(1)
       expect(store.getState().history).toBe(historyBefore)
+      expect(store.getState().planDetails['plan-a']).toMatchObject({
+        status: 'ready',
+        value: { plan: { status: 'archived' } },
+      })
     } finally {
       database.close()
     }
@@ -340,6 +348,7 @@ describe('feature store', () => {
         items: [],
       })
       expect(store.getState().pendingSyncCount).toBe(1)
+      expect(store.getState().planDetails['plan-a']).toBeUndefined()
     } finally {
       database.close()
     }

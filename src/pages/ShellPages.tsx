@@ -42,28 +42,6 @@ export function DashboardPage() {
   )
 }
 
-export function PlansPage() {
-  return (
-    <Page action={<Link aria-label="新建计划" className="round-action" to="/plans/new"><Icon name="plus" size={18} /></Link>} title="训练计划">
-      <StatePanel
-        action={<Link className="ui-button ui-button--primary" to="/plans/new"><Icon name="plus" size={17} />新建训练计划</Link>}
-        description="建立第一个计划，安排每周训练。"
-        kind="empty"
-        title="暂无训练计划"
-      />
-    </Page>
-  )
-}
-
-export function PlanCreatePage() {
-  return <FocusedPlaceholder backTo="/plans" eyebrow="返回计划" title="新建计划" description="计划与动作表单将在 T05 接入此页面壳。" />
-}
-
-export function PlanDetailPage() {
-  const { planId } = useParams()
-  return <FocusedPlaceholder backTo="/plans" eyebrow="返回计划" title="编辑计划" description={`计划 ${planId ?? ''} 的编辑表单将在 T05 接入。`} />
-}
-
 export function HistoryPage() {
   return (
     <Page title="记录">

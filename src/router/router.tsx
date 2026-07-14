@@ -1,13 +1,15 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppBootstrap } from '../app/AppBootstrap'
 import {
+  PlanCreatePage,
+  PlanDetailPage,
+  PlansPage,
+} from '../features/plans/PlanPages'
+import {
   DashboardPage,
   HistoryDetailPage,
   HistoryPage,
   NotFoundPage,
-  PlanCreatePage,
-  PlanDetailPage,
-  PlansPage,
   RouteErrorPage,
   SettingsPage,
   StatisticsPage,
