@@ -8,7 +8,10 @@
 
 html {
   min-width: 320px;
+  height: 100%;
   min-height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--color-canvas);
   color-scheme: dark;
   font-family: var(--font-body);
@@ -20,11 +23,23 @@ html {
 
 body {
   min-width: 320px;
+  height: 100%;
   min-height: 100%;
   margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
   background:
     radial-gradient(circle at 50% -20%, rgb(192 255 0 / 7%), transparent 34rem),
     var(--color-canvas);
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button,
@@ -53,7 +68,10 @@ svg {
 }
 
 #root {
-  min-height: 100svh;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
 }
 
 ::selection {

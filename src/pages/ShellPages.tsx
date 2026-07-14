@@ -22,7 +22,7 @@ import './shell-pages.css'
 import './dashboard.css'
 import './sync.css'
 
-function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children: ReactNode }) {
+function Page({ eyebrow, title, action, fixedContent, children }: { eyebrow?: string; title: string; action?: ReactNode; fixedContent?: ReactNode; children: ReactNode }) {
   return (
     <div className="page">
       <header className="page-header">
@@ -32,6 +32,7 @@ function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: s
         </div>
         {action}
       </header>
+      {fixedContent ? <div className="page-fixed">{fixedContent}</div> : null}
       <div className="page-body">{children}</div>
     </div>
   )
@@ -130,16 +131,6 @@ export function DashboardPage() {
         eyebrow="LOCAL TRAINING"
         title="FORGE"
       >
-      {!online || pendingSyncCount > 0 ? (
-        <div className="dashboard-connectivity" role="status">
-          {!online ? <span><Icon name="cloud-off" size={15} />离线模式，本地训练仍可使用</span> : null}
-          {pendingSyncCount > 0 ? (
-            <button onClick={openSyncDetails} type="button">
-              {pendingSyncCount} 项更改等待同步
-            </button>
-          ) : null}
-        </div>
-      ) : null}
       {reminderMessage ? (
         <div className="dashboard-reminder" role="status">
           <Icon name="alert" size={15} />
@@ -323,8 +314,7 @@ export function HistoryPage() {
   }, [loadHistory])
 
   return (
-    <Page title="记录">
-      <RecordSegments active="history" />
+    <Page fixedContent={<RecordSegments active="history" />} title="记录">
       {history.status === 'loading' && history.items.length === 0 ? (
         <StatePanel kind="loading" title="读取训练记录" description="正在读取本地完成快照。" />
       ) : history.status === 'error' ? (
@@ -413,8 +403,7 @@ export function StatisticsPage() {
   }
 
   return (
-    <Page title="记录">
-      <RecordSegments active="statistics" />
+    <Page fixedContent={<RecordSegments active="statistics" />} title="记录">
       <div aria-label="统计来源" className="statistics-scope">
         <button aria-pressed={scope === 'cached'} onClick={() => selectScope('cached')}>当前缓存</button>
         <button aria-pressed={scope === 'remote'} onClick={() => selectScope('remote')}>服务端最新</button>
@@ -631,16 +620,23 @@ export function SettingsPage() {
             label="训练提醒"
             onChange={() => void toggleReminder('trainingReminderEnabled')}
           />
-          <div className="settings-row">
-            <label htmlFor="reminder-lead"><strong>提前提醒</strong><small>仅用于设置了本地训练时间的计划。</small></label>
-            <select
-              disabled={pending !== null || !value.trainingReminderEnabled}
-              id="reminder-lead"
-              onChange={(event) => void save('reminderLeadMinutes', { reminderLeadMinutes: Number(event.target.value) })}
-              value={value.reminderLeadMinutes}
-            >
-              {[0, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? '准时' : `${minutes} 分钟`}</option>)}
-            </select>
+          <div
+            aria-hidden={!value.trainingReminderEnabled}
+            className={`settings-reminder-lead ${value.trainingReminderEnabled ? 'settings-reminder-lead--visible' : ''}`}
+          >
+            <div className="settings-reminder-lead__clip">
+              <div className="settings-row">
+                <label htmlFor="reminder-lead"><strong>提前提醒</strong><small>仅用于设置了本地训练时间的计划。</small></label>
+                <select
+                  disabled={pending !== null || !value.trainingReminderEnabled}
+                  id="reminder-lead"
+                  onChange={(event) => void save('reminderLeadMinutes', { reminderLeadMinutes: Number(event.target.value) })}
+                  value={value.reminderLeadMinutes}
+                >
+                  {[0, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? '准时' : `${minutes} 分钟`}</option>)}
+                </select>
+              </div>
+            </div>
           </div>
           <ReminderToggle
             checked={value.restReminderEnabled}
