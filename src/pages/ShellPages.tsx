@@ -1,6 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Card, Progress, StatePanel } from '../ui/primitives'
+import { Button, Card, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
 import {
@@ -12,6 +12,12 @@ import {
   type StatisticsCache,
   type WorkoutSession,
 } from '../domain'
+import {
+  browserReminderScheduler,
+  browserReminderService,
+  trainingReminderSchedule,
+  type NotificationCapability,
+} from '../notifications'
 import './shell-pages.css'
 import './dashboard.css'
 
@@ -46,6 +52,8 @@ export function DashboardPage() {
   const pendingSyncCount = useForgeStore((state) => state.pendingSyncCount)
   const loadDashboard = useForgeStore((state) => state.loadDashboard)
   const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
+  const settings = useForgeStore((state) => state.settings.value)
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null)
   const requestedDate = searchParams.get('date')
   const focusDate = isLocalDate(requestedDate) ? requestedDate : localDate()
   const range = dashboardWeekRange(dateFromLocalDate(focusDate))
@@ -76,6 +84,21 @@ export function DashboardPage() {
   }
 
   const snapshot = dashboard.value
+
+  useEffect(() => {
+    browserReminderScheduler.cancelAll()
+    if (!snapshot || !settings?.trainingReminderEnabled) return
+
+    for (const reminder of trainingReminderSchedule(
+      snapshot,
+      settings.reminderLeadMinutes,
+    )) {
+      browserReminderScheduler.schedule(reminder, (message) => {
+        setReminderMessage(browserReminderService.deliver(message).inAppMessage)
+      })
+    }
+
+  }, [settings?.reminderLeadMinutes, settings?.trainingReminderEnabled, snapshot])
   const totalOccurrences = snapshot?.days.reduce(
     (count, day) => count + day.occurrences.length,
     0,
@@ -96,6 +119,12 @@ export function DashboardPage() {
         <div className="dashboard-connectivity" role="status">
           {!online ? <span><Icon name="cloud-off" size={15} />离线模式，本地训练仍可使用</span> : null}
           {pendingSyncCount > 0 ? <span>{pendingSyncCount} 项更改等待同步</span> : null}
+        </div>
+      ) : null}
+      {reminderMessage ? (
+        <div className="dashboard-reminder" role="status">
+          <Icon name="alert" size={15} />
+          <span>{reminderMessage}</span>
         </div>
       ) : null}
 
@@ -425,15 +454,183 @@ function StatisticMetric({ label, value, unit }: { label: string; value: number;
 }
 
 export function SettingsPage() {
+  const settings = useForgeStore((state) => state.settings)
+  const plans = useForgeStore((state) => state.plans.items)
+  const loadSettings = useForgeStore((state) => state.loadSettings)
+  const updateSettings = useForgeStore((state) => state.updateSettings)
+  const [pending, setPending] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const capability = browserReminderService.inspect()
+
+  useEffect(() => {
+    if (
+      !settings.value ||
+      settings.status === 'loading' ||
+      settings.value.notificationPermission === capability.permission
+    ) {
+      return
+    }
+    void updateSettings({ notificationPermission: capability.permission }).catch(
+      () => setSaveError('通知状态暂时无法保存；站内提醒仍可使用。'),
+    )
+  }, [capability.permission, settings.status, settings.value, updateSettings])
+
+  if (!settings.value) {
+    return (
+      <Page title="设置">
+        <StatePanel
+          action={settings.status === 'error' ? <Button onClick={() => void loadSettings()}>重试</Button> : undefined}
+          description={settings.status === 'error' ? '本地设置暂时无法读取，请重试。' : '正在读取本地训练偏好。'}
+          kind={settings.status === 'error' ? 'error' : 'loading'}
+          title={settings.status === 'error' ? '无法读取设置' : '正在加载设置'}
+        />
+      </Page>
+    )
+  }
+
+  const value = settings.value
+  const hasTimedPlan = plans.some(
+    (plan) => plan.status === 'active' && !plan.deletedAt && Boolean(plan.localTime),
+  )
+
+  const save = async (
+    key: string,
+    patch: Parameters<typeof updateSettings>[0],
+  ) => {
+    setPending(key)
+    setSaveError(null)
+    try {
+      await updateSettings(patch)
+      if (key === 'reminderLeadMinutes') browserReminderScheduler.cancelAll()
+    } catch {
+      setSaveError('设置保存失败，请重试。')
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const toggleReminder = async (
+    key: 'trainingReminderEnabled' | 'restReminderEnabled',
+  ) => {
+    const enabled = !value[key]
+    if (!enabled) {
+      if (key === 'trainingReminderEnabled') browserReminderScheduler.cancelAll()
+      await save(key, { [key]: false })
+      return
+    }
+
+    setPending(key)
+    setSaveError(null)
+    try {
+      const permission = await browserReminderService.requestPermission()
+      await updateSettings({ [key]: true, notificationPermission: permission })
+    } catch {
+      setSaveError('提醒设置保存失败；站内计时仍可继续使用。')
+    } finally {
+      setPending(null)
+    }
+  }
+
   return (
     <Page title="设置">
-      <Card className="settings-preview">
-        <div><span>本地用户</span><strong>训练者</strong></div>
-        <div><span>数据模式</span><strong>本地优先</strong></div>
+      <Card className="settings-profile">
+        <span aria-hidden="true"><Icon name="settings" size={22} /></span>
+        <div><strong>训练者</strong><small>Forge 本地用户</small></div>
       </Card>
-      <StatePanel kind="empty" title="设置壳已就绪" description="单位、提醒与同步状态将在后续切片接入。" />
+
+      <section className="settings-section" aria-labelledby="training-preferences-title">
+        <h2 id="training-preferences-title">训练偏好</h2>
+        <Card className="settings-list">
+          <div className="settings-row">
+            <div><strong>默认重量单位</strong><small>仅影响新建目标与编辑控件，不改写历史记录。</small></div>
+            <div aria-label="默认重量单位" className="settings-unit" role="group">
+              {(['kg', 'lb'] as const).map((unit) => (
+                <button
+                  aria-pressed={value.defaultWeightUnit === unit}
+                  disabled={pending !== null}
+                  key={unit}
+                  onClick={() => void save('defaultWeightUnit', { defaultWeightUnit: unit })}
+                  type="button"
+                >
+                  {unit === 'lb' ? 'lbs' : 'kg'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ReminderToggle
+            checked={value.trainingReminderEnabled}
+            description="按计划时间提前提醒；无计划时间时不调度。"
+            disabled={pending !== null}
+            label="训练提醒"
+            onChange={() => void toggleReminder('trainingReminderEnabled')}
+          />
+          <div className="settings-row">
+            <label htmlFor="reminder-lead"><strong>提前提醒</strong><small>仅用于设置了本地训练时间的计划。</small></label>
+            <select
+              disabled={pending !== null || !value.trainingReminderEnabled}
+              id="reminder-lead"
+              onChange={(event) => void save('reminderLeadMinutes', { reminderLeadMinutes: Number(event.target.value) })}
+              value={value.reminderLeadMinutes}
+            >
+              {[0, 5, 10, 15, 30, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? '准时' : `${minutes} 分钟`}</option>)}
+            </select>
+          </div>
+          <ReminderToggle
+            checked={value.restReminderEnabled}
+            description="组间休息到点后补充系统通知。"
+            disabled={pending !== null}
+            label="休息提醒"
+            onChange={() => void toggleReminder('restReminderEnabled')}
+          />
+        </Card>
+      </section>
+
+      <section className="settings-section" aria-labelledby="notification-status-title">
+        <h2 id="notification-status-title">通知状态</h2>
+        <Card className={`settings-notification settings-notification--${capability.permission}`}>
+          <strong>{notificationStatusTitle(capability)}</strong>
+          <p>{notificationStatusDescription(capability)}</p>
+          {value.trainingReminderEnabled && !hasTimedPlan ? <p>当前计划未设置训练时间，无法调度训练提醒；训练流程不受影响。</p> : null}
+          <small>系统通知仅作增强；Forge 打开时始终保留站内提醒。</small>
+        </Card>
+      </section>
+
+      {saveError ? <p className="settings-error" role="alert">{saveError}</p> : null}
     </Page>
   )
+}
+
+function ReminderToggle({ label, description, checked, disabled, onChange }: { label: string; description: string; checked: boolean; disabled: boolean; onChange: () => void }) {
+  return (
+    <div className="settings-row">
+      <div><strong>{label}</strong><small>{description}</small></div>
+      <button
+        aria-checked={checked}
+        aria-label={label}
+        className="settings-switch"
+        disabled={disabled}
+        onClick={onChange}
+        role="switch"
+        type="button"
+      ><span /></button>
+    </div>
+  )
+}
+
+function notificationStatusTitle(capability: NotificationCapability) {
+  if (capability.permission === 'granted') return '系统通知已允许'
+  if (capability.permission === 'denied') return '系统通知已被拒绝'
+  if (capability.reason === 'ios_requires_install') return 'iOS 需要先添加到主屏'
+  if (capability.permission === 'unsupported') return '此环境不支持系统通知'
+  return '尚未请求系统通知'
+}
+
+function notificationStatusDescription(capability: NotificationCapability) {
+  if (capability.permission === 'granted') return '训练与休息提醒可补充系统通知。'
+  if (capability.permission === 'denied') return '可前往浏览器或系统设置恢复权限；当前仅使用站内提醒。'
+  if (capability.reason === 'ios_requires_install') return 'iPhone 或 iPad 需将 Forge 添加到主屏，并由主屏图标启动后才能申请通知；当前仅使用站内提醒。'
+  if (capability.permission === 'unsupported') return '当前浏览器无法提供 Notification API，仅使用站内提醒。'
+  return '只有在你明确开启训练或休息提醒时，Forge 才会申请系统权限。'
 }
 
 export function NotFoundPage() {

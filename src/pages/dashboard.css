@@ -57,3 +57,4 @@
   .dashboard-workout__actions .ui-button { width: 100%; }
   .recent-workout > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.dashboard-reminder{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);border:1px solid rgb(192 255 0/25%);border-radius:var(--radius-md);background:rgb(192 255 0/8%);color:var(--color-accent);font-size:var(--text-sm)}

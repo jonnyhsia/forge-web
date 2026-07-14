@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   useBlocker,
   Link,
@@ -9,6 +9,7 @@ import {
 import { DataError, toDataError } from '../../data'
 import type { WeightValue } from '../../domain'
 import { useForgeStore } from '../../store'
+import { browserReminderService } from '../../notifications'
 import { Icon } from '../../ui/Icon'
 import { Button, Card, Dialog, Progress, StatePanel } from '../../ui/primitives'
 import {
@@ -287,6 +288,8 @@ function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { a
   const [current, setCurrent] = useState(view)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const systemReminderEnabled = useForgeStore((state) => state.settings.value?.trainingReminderEnabled ?? false)
+  const reminderMessage = useTimerTargetReminder(current, systemReminderEnabled)
   useEffect(() => {
     const interval = window.setInterval(() => setCurrent((previous) => adapter.refreshTimer(previous) as DurationTrainingView), 250)
     return () => window.clearInterval(interval)
@@ -305,7 +308,7 @@ function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { a
     }
   }
   return (
-    <TimerWorkoutShell current={current} label="实际时长">
+    <TimerWorkoutShell current={current} label="实际时长" reminderMessage={reminderMessage}>
       <Button disabled={pending || current.elapsedSeconds <= 0} fullWidth onClick={() => void complete()}>{pending ? '正在保存…' : current.targetReached ? '完成本组' : '提前结束并记录'}</Button>
       {error ? <p className="training-submit-error" role="alert">保存失败，请重试。{error}</p> : null}
       {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
@@ -316,6 +319,8 @@ function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { a
 function RestWorkout({ adapter, view, onChange, onResume, resumeError }: { adapter: TrainingUiAdapter; view: RestTrainingView; onChange: (view: TrainingView) => void; onResume: () => void; resumeError: string | null }) {
   const [current, setCurrent] = useState(view)
   const [pending, setPending] = useState(false)
+  const systemReminderEnabled = useForgeStore((state) => state.settings.value?.restReminderEnabled ?? false)
+  const reminderMessage = useTimerTargetReminder(current, systemReminderEnabled)
   useEffect(() => {
     const interval = window.setInterval(() => setCurrent((previous) => adapter.refreshTimer(previous) as RestTrainingView), 250)
     return () => window.clearInterval(interval)
@@ -325,21 +330,45 @@ function RestWorkout({ adapter, view, onChange, onResume, resumeError }: { adapt
     try { onChange(await adapter.finishRest(current)) } finally { setPending(false) }
   }
   return (
-    <TimerWorkoutShell current={current} label={current.targetReached ? '休息完成' : '剩余时间'}>
+    <TimerWorkoutShell current={current} label={current.targetReached ? '休息完成' : '剩余时间'} reminderMessage={reminderMessage}>
       <Button disabled={pending} fullWidth onClick={() => void finish()}>{pending ? '正在保存…' : current.targetReached ? '继续下一组' : '跳过休息'}</Button>
       {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
     </TimerWorkoutShell>
   )
 }
 
-function TimerWorkoutShell({ current, label, children }: { current: DurationTrainingView | RestTrainingView; label: string; children: ReactNode }) {
+function TimerWorkoutShell({ current, label, reminderMessage, children }: { current: DurationTrainingView | RestTrainingView; label: string; reminderMessage: string | null; children: ReactNode }) {
   return (
     <main className="training-content training-timer-content">
       <section className="training-exercise-heading"><p>{current.kind === 'rest' ? '组间休息' : '当前动作'}</p><h1>{current.exerciseName}</h1><span>第 {current.activeSetNumber} 组 / 共 {current.targetSets} 组</span></section>
       <Card className="training-timer-card"><small>{label}</small><strong>{formatDuration(current.kind === 'rest' ? current.remainingSeconds : current.elapsedSeconds)}</strong><span>目标 {formatDuration(current.targetSeconds)}</span>{current.targetReached && current.kind === 'duration' ? <em>已达到目标{current.overtimeSeconds ? `，超出 ${formatDuration(current.overtimeSeconds)}` : ''}</em> : null}</Card>
+      {reminderMessage ? <p className="training-reminder" role="status">{reminderMessage}</p> : null}
       {children}
     </main>
   )
+}
+
+function useTimerTargetReminder(
+  current: DurationTrainingView | RestTrainingView,
+  systemReminderEnabled: boolean,
+) {
+  const [message, setMessage] = useState<string | null>(null)
+  const deliveredKey = useRef<string | null>(null)
+  const key = `${current.kind}:${current.sessionId}:${current.exerciseResultId}:${current.activeSetNumber}`
+
+  useEffect(() => {
+    if (!current.targetReached || deliveredKey.current === key) return
+    deliveredKey.current = key
+    const reminder = current.kind === 'rest'
+      ? { kind: 'rest' as const, title: '休息完成', body: '休息时间已到，可以继续下一组。' }
+      : { kind: 'exercise' as const, title: '计时目标完成', body: `${current.exerciseName} 已达到计时目标。` }
+    const inAppMessage = systemReminderEnabled
+      ? browserReminderService.deliver(reminder).inAppMessage
+      : reminder.body
+    setMessage(inAppMessage)
+  }, [current.exerciseName, current.targetReached, key, systemReminderEnabled])
+
+  return message
 }
 
 function PausedOverlay({ error, onResume }: { error: string | null; onResume: () => void }) {
