@@ -17,6 +17,7 @@ import type {
   AppSettings,
   EntityId,
   StatisticsCache,
+  StatisticsRange,
   TrainingPlan,
   WorkoutSession,
   WorkoutTransitionCommand,
@@ -49,6 +50,7 @@ export interface ForgeStoreDependencies {
   data: ForgeDataUseCases
   countPendingSync(): Promise<number>
   pageLimit?: number
+  now?: () => string
 }
 
 export interface LoadPlansOptions {
@@ -97,6 +99,7 @@ export interface ForgeState {
     timer: WorkoutTimerState | undefined,
   ) => Promise<WorkoutSession>
   loadStatistics: () => Promise<void>
+  rebuildStatistics: (range: StatisticsRange) => Promise<void>
   saveStatistics: (cache: StatisticsCache) => Promise<void>
   loadSettings: () => Promise<void>
   updateSettings: (patch: SettingsPatch) => Promise<void>
@@ -528,6 +531,30 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       })
 
       try {
+        const value = await dependencies.data.statistics.list()
+        set({ statistics: { value, status: 'ready', error: null } })
+      } catch (error) {
+        set({
+          statistics: {
+            ...get().statistics,
+            status: 'error',
+            error: toDataError(error),
+          },
+        })
+      }
+    },
+
+    rebuildStatistics: async (range) => {
+      set({
+        statistics: {
+          ...get().statistics,
+          status: 'loading',
+          error: null,
+        },
+      })
+
+      try {
+        await dependencies.data.statistics.rebuild(range, dependencies.now?.())
         const value = await dependencies.data.statistics.list()
         set({ statistics: { value, status: 'ready', error: null } })
       } catch (error) {

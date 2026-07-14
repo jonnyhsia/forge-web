@@ -164,9 +164,17 @@ export interface PersonalRecord {
   achievedAt: IsoDateTime
 }
 
+export interface WeeklyTrendPoint {
+  weekStart: string
+  workoutCount: number
+}
+
 export interface StatisticsSummary {
   workoutCount: number
+  weeklyWorkoutCount: number
+  monthlyWorkoutCount: number
   streakDays: number
+  weeklyTrend: WeeklyTrendPoint[]
   trainingVolumeKg: number
   personalRecords: PersonalRecord[]
 }

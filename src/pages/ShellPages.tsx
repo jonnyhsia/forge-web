@@ -1,8 +1,9 @@
 import { useEffect, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Card, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
+import { rollingEightWeekRange, type StatisticsCache } from '../domain'
 import './shell-pages.css'
 
 function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children: ReactNode }) {
@@ -126,12 +127,103 @@ export function HistoryDetailPage() {
 }
 
 export function StatisticsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const statistics = useForgeStore((state) => state.statistics)
+  const online = useForgeStore((state) => state.online)
+  const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
+  const scope = searchParams.get('scope') === 'remote' ? 'remote' : 'cached'
+  const cache = statistics.value.find((item) => item.scope === scope)
+
+  useEffect(() => {
+    void rebuildStatistics(rollingEightWeekRange())
+  }, [rebuildStatistics])
+
+  const selectScope = (nextScope: StatisticsCache['scope']) => {
+    setSearchParams(nextScope === 'remote' ? { scope: 'remote' } : {})
+  }
+
   return (
     <Page title="记录">
       <RecordSegments active="statistics" />
-      <StatePanel kind="empty" title="暂无统计数据" description="完成训练后，这里将展示训练频率、连续训练和个人最佳。" />
+      <div aria-label="统计来源" className="statistics-scope">
+        <button aria-pressed={scope === 'cached'} onClick={() => selectScope('cached')}>当前缓存</button>
+        <button aria-pressed={scope === 'remote'} onClick={() => selectScope('remote')}>服务端最新</button>
+      </div>
+      {statistics.status === 'loading' && !cache ? (
+        <StatePanel kind="loading" title="计算训练统计" description="正在从完成历史重建本地缓存。" />
+      ) : statistics.status === 'error' && !cache ? (
+        <StatePanel kind="error" title="统计读取失败" description={statistics.error?.message ?? '请稍后重试。'} />
+      ) : !cache ? (
+        <StatePanel
+          kind={scope === 'remote' && !online ? 'offline' : 'empty'}
+          title={scope === 'remote' ? '暂无服务端统计' : '暂无统计缓存'}
+          description={scope === 'remote'
+            ? online ? '服务端统计将在同步能力接入后显示；当前可切回本地缓存。' : '当前离线，无法读取服务端最新统计；可切回本地缓存。'
+            : '完成训练后，这里会从本地历史生成统计。'}
+        />
+      ) : (
+        <StatisticsContent cache={cache} stale={statistics.status === 'error'} />
+      )}
     </Page>
   )
+}
+
+function StatisticsContent({ cache, stale }: { cache: StatisticsCache; stale: boolean }) {
+  const summary = cache.summary
+  const maxTrend = Math.max(...summary.weeklyTrend.map((item) => item.workoutCount), 1)
+
+  return (
+    <div className="statistics-content">
+      <p className="statistics-cache-meta">
+        {cache.source === 'history' ? '本地历史缓存' : '服务端统计'} · {formatDate(cache.rangeStart)}–{formatDate(cache.rangeEnd)} · 更新于 {formatDateTime(cache.generatedAt)}
+        {stale ? ' · 本次更新失败，显示最近缓存' : ''}
+      </p>
+      {summary.workoutCount === 0 ? (
+        <StatePanel kind="empty" title="暂无统计数据" description="缓存范围内还没有已完成训练。" />
+      ) : (
+        <>
+          <div className="statistics-summary">
+            <StatisticMetric label="本月训练" value={summary.monthlyWorkoutCount} unit="次" />
+            <StatisticMetric label="本周训练" value={summary.weeklyWorkoutCount} unit="次" />
+            <StatisticMetric label="连续打卡" value={summary.streakDays} unit="天" />
+          </div>
+          <Card className="statistics-trend">
+            <p className="statistics-label">训练频率</p>
+            <h2>近 8 周</h2>
+            <div aria-label="近 8 周训练次数" className="statistics-chart">
+              {summary.weeklyTrend.map((item) => (
+                <div className="statistics-chart__week" key={item.weekStart}>
+                  <span className="statistics-chart__count">{item.workoutCount}</span>
+                  <span className="statistics-chart__bar" style={{ height: `${item.workoutCount / maxTrend * 100}%` }} />
+                  <small>{formatWeek(item.weekStart)}</small>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card className="statistics-prs">
+            <header><p className="statistics-label">个人最佳</p></header>
+            {summary.personalRecords.length === 0 ? (
+              <p className="statistics-empty-row">尚无外加重量 PR</p>
+            ) : summary.personalRecords.map((record) => (
+              <div className="statistics-pr" key={record.exerciseId}>
+                <strong>{record.exerciseName}</strong>
+                <span><b>{formatNumber(record.weightKg)} kg</b><small>{formatDate(record.achievedAt)}</small></span>
+              </div>
+            ))}
+          </Card>
+          <Card className="statistics-volume">
+            <p className="statistics-label">本月总训练量</p>
+            <strong>{formatNumber(summary.trainingVolumeKg)}</strong>
+            <span>kg</span>
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}
+
+function StatisticMetric({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return <Card className="statistics-metric"><span>{label}</span><strong>{value}</strong><small>{unit}</small></Card>
 }
 
 export function SettingsPage() {
@@ -182,6 +274,19 @@ function RecordSegments({ active }: { active: 'history' | 'statistics' }) {
 
 function formatDateTime(value?: string) {
   return value ? new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '时间未知'
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('zh-TW', { month: '2-digit', day: '2-digit' }).format(new Date(value))
+}
+
+function formatWeek(localDate: string) {
+  const [, month, day] = localDate.split('-')
+  return `${Number(month)}/${Number(day)}`
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(value)
 }
 
 function formatSet(set: import('../domain').WorkoutSetResult) {

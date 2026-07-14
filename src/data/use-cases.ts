@@ -5,12 +5,14 @@ import {
   type Exercise,
   type PlanExercise,
   type StatisticsCache,
+  type StatisticsRange,
   type TrainingPlan,
   type WorkoutSession,
   type WorkoutTransitionCommand,
   type CompleteWorkoutSetCommand,
   type CompleteWorkoutSetOutcome,
   type WorkoutTimerState,
+  calculateStatistics,
 } from '../domain'
 import { DEFAULT_APP_SETTINGS, type ForgeDatabase } from './database'
 import { DataError, toDataError } from './errors'
@@ -82,6 +84,10 @@ export interface SettingsUseCases {
 export interface StatisticsUseCases {
   list(): Promise<StatisticsCache[]>
   save(cache: StatisticsCache): Promise<StatisticsCache>
+  rebuild(
+    range: StatisticsRange,
+    generatedAt?: string,
+  ): Promise<StatisticsCache>
 }
 
 class LocalPlansUseCases implements PlansUseCases {
@@ -360,10 +366,11 @@ class LocalStatisticsUseCases implements StatisticsUseCases {
 
   async list(): Promise<StatisticsCache[]> {
     try {
-      return await this.database.statisticsCaches
+      const caches = await this.database.statisticsCaches
         .orderBy('generatedAt')
         .reverse()
         .toArray()
+      return caches.filter(isCurrentStatisticsCache)
     } catch (error) {
       throw toDataError(error)
     }
@@ -377,6 +384,46 @@ class LocalStatisticsUseCases implements StatisticsUseCases {
       throw toDataError(error)
     }
   }
+
+  async rebuild(
+    range: StatisticsRange,
+    generatedAt: string = nowIso(),
+  ): Promise<StatisticsCache> {
+    try {
+      const history = await this.database.workoutSessions
+        .where('status')
+        .equals('completed')
+        .filter((session) => !session.deletedAt && Boolean(session.endedAt))
+        .toArray()
+      const cache: StatisticsCache = {
+        key: 'cached:rolling-8-weeks',
+        scope: 'cached',
+        rangeStart: range.start,
+        rangeEnd: range.end,
+        generatedAt,
+        source: 'history',
+        summary: calculateStatistics(range, history),
+      }
+      await this.database.statisticsCaches.put(cache)
+      return cache
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+}
+
+function isCurrentStatisticsCache(cache: StatisticsCache): boolean {
+  const summary = cache.summary as Partial<StatisticsCache['summary']> | undefined
+  return Boolean(
+    summary &&
+      typeof summary.workoutCount === 'number' &&
+      typeof summary.weeklyWorkoutCount === 'number' &&
+      typeof summary.monthlyWorkoutCount === 'number' &&
+      typeof summary.streakDays === 'number' &&
+      Array.isArray(summary.weeklyTrend) &&
+      typeof summary.trainingVolumeKg === 'number' &&
+      Array.isArray(summary.personalRecords),
+  )
 }
 
 export interface ForgeDataUseCases {

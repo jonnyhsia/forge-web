@@ -52,7 +52,10 @@ function statisticsCache(): StatisticsCache {
     source: 'history',
     summary: {
       workoutCount: 1,
+      weeklyWorkoutCount: 1,
+      monthlyWorkoutCount: 1,
       streakDays: 1,
+      weeklyTrend: [{ weekStart: '2026-07-13', workoutCount: 1 }],
       trainingVolumeKg: 100,
       personalRecords: [],
     },

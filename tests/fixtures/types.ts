@@ -137,7 +137,10 @@ export interface StatisticsCacheFixture {
   source: 'history' | 'server'
   summary: {
     workoutCount: number
+    weeklyWorkoutCount: number
+    monthlyWorkoutCount: number
     streakDays: number
+    weeklyTrend: Array<{ weekStart: string; workoutCount: number }>
     trainingVolumeKg: number
     personalRecords: Array<{
       exerciseId: string

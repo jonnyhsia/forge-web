@@ -129,7 +129,12 @@ describe('IndexedDB schema v2', () => {
       source: 'history',
       summary: {
         workoutCount: 12,
+        weeklyWorkoutCount: 3,
+        monthlyWorkoutCount: 12,
         streakDays: 3,
+        weeklyTrend: [
+          { weekStart: '2026-07-06', workoutCount: 3 },
+        ],
         trainingVolumeKg: 12_450,
         personalRecords: [
           {
