@@ -13,10 +13,11 @@ export interface EnqueueSyncInput {
   payload?: unknown
   priority: number
   idempotencyKey?: string
+  dedupeKey?: string
 }
 
 function createDedupeKey(input: EnqueueSyncInput): string {
-  return `${input.entityType}:${input.entityId}`
+  return input.dedupeKey ?? `${input.entityType}:${input.entityId}`
 }
 
 export function createSyncQueueItem(input: EnqueueSyncInput): SyncQueueItem {

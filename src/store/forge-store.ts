@@ -11,6 +11,7 @@ import {
   type PlanAggregate,
   type PlansFilter,
   type SettingsPatch,
+  type StartWorkoutInput,
 } from '../data'
 import type {
   AppSettings,
@@ -18,6 +19,9 @@ import type {
   StatisticsCache,
   TrainingPlan,
   WorkoutSession,
+  WorkoutTransitionCommand,
+  CompleteWorkoutSetCommand,
+  CompleteWorkoutSetOutcome,
 } from '../domain'
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -76,7 +80,15 @@ export interface ForgeState {
   deletePlan: (planId: EntityId) => Promise<void>
   loadHistory: (options?: LoadPageOptions) => Promise<void>
   loadWorkout: () => Promise<void>
-  saveWorkout: (session: WorkoutSession) => Promise<void>
+  startWorkout: (input: StartWorkoutInput) => Promise<WorkoutSession>
+  transitionWorkout: (
+    sessionId: EntityId,
+    command: WorkoutTransitionCommand,
+  ) => Promise<WorkoutSession>
+  completeWorkoutSet: (
+    command: CompleteWorkoutSetCommand,
+    idempotencyKey: string,
+  ) => Promise<CompleteWorkoutSetOutcome>
   loadStatistics: () => Promise<void>
   saveStatistics: (cache: StatisticsCache) => Promise<void>
   loadSettings: () => Promise<void>
@@ -362,17 +374,83 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       }
     },
 
-    saveWorkout: async (session) => {
+    startWorkout: async (input) => {
       try {
-        await dependencies.data.workouts.save(session)
+        const session = await dependencies.data.workouts.start(input)
         const pendingSyncCount = await dependencies.countPendingSync()
-        set({ pendingSyncCount })
+        set({
+          pendingSyncCount,
+          workouts: {
+            value: session.status === 'completed' ? null : session,
+            status: 'ready',
+            error: null,
+          },
+        })
+        return session
+      } catch (error) {
+        const dataError = toDataError(error)
+        set({
+          workouts: {
+            ...get().workouts,
+            status: 'error',
+            error: dataError,
+          },
+        })
+        throw dataError
+      }
+    },
 
-        const refreshes: Promise<void>[] = [get().loadWorkout()]
+    transitionWorkout: async (sessionId, command) => {
+      try {
+        const session = await dependencies.data.workouts.transition(
+          sessionId,
+          command,
+        )
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({
+          pendingSyncCount,
+          workouts: {
+            value:
+              session.status === 'completed' || session.status === 'cancelled'
+                ? null
+                : session,
+            status: 'ready',
+            error: null,
+          },
+        })
         if (session.status === 'completed') {
-          refreshes.push(get().loadHistory({ reset: true }))
+          await get().loadHistory({ reset: true })
         }
-        await Promise.all(refreshes)
+        return session
+      } catch (error) {
+        const dataError = toDataError(error)
+        set({
+          workouts: {
+            ...get().workouts,
+            status: 'error',
+            error: dataError,
+          },
+        })
+        throw dataError
+      }
+    },
+
+    completeWorkoutSet: async (command, idempotencyKey) => {
+      try {
+        const outcome = await dependencies.data.workouts.completeSet(
+          command,
+          idempotencyKey,
+        )
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({
+          pendingSyncCount,
+          workouts: {
+            value: outcome.session,
+            status: 'ready',
+            error: null,
+          },
+        })
+        return outcome
       } catch (error) {
         const dataError = toDataError(error)
         set({

@@ -354,17 +354,24 @@ describe('feature store', () => {
     }
   })
 
-  it('refreshes workout and history after saving a completed workout', async () => {
+  it('refreshes workout and history after completing a workout', async () => {
     const database = new ForgeDatabase('forge-t03-save-workout-store')
     const store = createForgeStore({
       initialize: () => database.open().then(() => undefined),
       data: createForgeDataUseCases(database),
       countPendingSync: () => database.syncQueue.count(),
     })
-    const completed = completedSession('session-a', timestamp)
+    const active = {
+      ...completedSession('session-a', timestamp),
+      status: 'active' as const,
+      endedAt: undefined,
+    }
 
     try {
-      await store.getState().saveWorkout(completed)
+      await database.workoutSessions.put(active)
+      await store
+        .getState()
+        .transitionWorkout('session-a', { type: 'complete' })
 
       expect(store.getState().workouts).toEqual({
         value: null,

@@ -7,10 +7,17 @@ import {
   type StatisticsCache,
   type TrainingPlan,
   type WorkoutSession,
+  type WorkoutTransitionCommand,
+  type CompleteWorkoutSetCommand,
+  type CompleteWorkoutSetOutcome,
 } from '../domain'
 import { DEFAULT_APP_SETTINGS, type ForgeDatabase } from './database'
 import { DataError, toDataError } from './errors'
-import { LocalDataService } from './local-data-service'
+import {
+  LocalDataService,
+  type StartWorkoutInput,
+  type WorkoutRuntimeDependencies,
+} from './local-data-service'
 import type { Page, PageRequest } from './pagination'
 import {
   DexiePlansRepository,
@@ -42,7 +49,15 @@ export interface PlansUseCases {
 export interface WorkoutsUseCases {
   get(sessionId: EntityId): Promise<WorkoutSession>
   getActive(): Promise<WorkoutSession | null>
-  save(session: WorkoutSession): Promise<WorkoutSession>
+  start(input: StartWorkoutInput): Promise<WorkoutSession>
+  transition(
+    sessionId: EntityId,
+    command: WorkoutTransitionCommand,
+  ): Promise<WorkoutSession>
+  completeSet(
+    command: CompleteWorkoutSetCommand,
+    idempotencyKey: string,
+  ): Promise<CompleteWorkoutSetOutcome>
 }
 
 export interface HistoryUseCases {
@@ -164,13 +179,16 @@ class LocalPlansUseCases implements PlansUseCases {
 class LocalWorkoutsUseCases implements WorkoutsUseCases {
   private readonly database: ForgeDatabase
   private readonly localData: LocalDataService
+  private readonly runtime: WorkoutRuntimeDependencies
 
   constructor(
     database: ForgeDatabase,
     localData: LocalDataService,
+    runtime: WorkoutRuntimeDependencies,
   ) {
     this.database = database
     this.localData = localData
+    this.runtime = runtime
   }
 
   async get(sessionId: EntityId): Promise<WorkoutSession> {
@@ -209,9 +227,39 @@ class LocalWorkoutsUseCases implements WorkoutsUseCases {
     }
   }
 
-  async save(session: WorkoutSession): Promise<WorkoutSession> {
+  async start(input: StartWorkoutInput): Promise<WorkoutSession> {
     try {
-      return await this.localData.saveWorkoutSession(session)
+      return await this.localData.startWorkoutSession(input, this.runtime)
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+
+  async transition(
+    sessionId: EntityId,
+    command: WorkoutTransitionCommand,
+  ): Promise<WorkoutSession> {
+    try {
+      return await this.localData.transitionWorkoutSession(
+        sessionId,
+        command,
+        this.runtime,
+      )
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+
+  async completeSet(
+    command: CompleteWorkoutSetCommand,
+    idempotencyKey: string,
+  ): Promise<CompleteWorkoutSetOutcome> {
+    try {
+      return await this.localData.completeWorkoutSet(
+        command,
+        idempotencyKey,
+        this.runtime,
+      )
     } catch (error) {
       throw toDataError(error)
     }
@@ -329,6 +377,10 @@ export interface ForgeDataUseCases {
 
 export function createForgeDataUseCases(
   database: ForgeDatabase,
+  runtime: WorkoutRuntimeDependencies = {
+    createId: () => crypto.randomUUID(),
+    now: nowIso,
+  },
 ): ForgeDataUseCases {
   const localData = new LocalDataService(
     database,
@@ -341,7 +393,7 @@ export function createForgeDataUseCases(
       new DexiePlansRepository(database),
       localData,
     ),
-    workouts: new LocalWorkoutsUseCases(database, localData),
+    workouts: new LocalWorkoutsUseCases(database, localData, runtime),
     history: new LocalHistoryUseCases(
       database,
       new DexieHistoryRepository(database),

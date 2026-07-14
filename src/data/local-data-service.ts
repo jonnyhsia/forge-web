@@ -8,8 +8,17 @@ import type {
   TrainingPlan,
   WorkoutSession,
 } from '../domain/entities'
-import { nowIso } from '../domain/factories'
-import { DataError } from './errors'
+import { createEntityId, nowIso } from '../domain/factories'
+import { DataError, type DataErrorCode } from './errors'
+import {
+  InvalidWorkoutTransitionError,
+  InvalidWorkoutSetError,
+  completeWorkoutSet,
+  transitionWorkout,
+  type CompleteWorkoutSetCommand,
+  type CompleteWorkoutSetOutcome,
+  type WorkoutTransitionCommand,
+} from '../domain/workout-state-machine'
 import {
   SYNC_PRIORITY,
   type SyncEntityType,
@@ -22,6 +31,35 @@ import {
 } from './sync/sync-queue'
 
 class ActiveSessionExistsError extends Error {}
+
+class WorkoutMutationError extends Error {
+  readonly code: DataErrorCode
+
+  constructor(code: DataErrorCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+export interface WorkoutRuntimeDependencies {
+  createId(): string
+  now(): string
+}
+
+export interface StartWorkoutInput {
+  planId: string
+  localDate: string
+  idempotencyKey: string
+}
+
+function isLocalDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`)
+  return (
+    Number.isFinite(timestamp) &&
+    new Date(timestamp).toISOString().slice(0, 10) === value
+  )
+}
 
 function pendingEntity<TEntity extends BaseEntity>(entity: TEntity): TEntity {
   return {
@@ -129,14 +167,264 @@ export class LocalDataService {
     return pendingPlan
   }
 
-  saveWorkoutSession(session: WorkoutSession): Promise<WorkoutSession> {
-    return this.saveEntity(
-      this.database.workoutSessions,
-      pendingEntity(session),
-      'workout-session',
-      SYNC_PRIORITY.workoutSession,
-      session.idempotencyKey,
-    )
+  async startWorkoutSession(
+    input: StartWorkoutInput,
+    dependencies: WorkoutRuntimeDependencies = {
+      createId: createEntityId,
+      now: nowIso,
+    },
+  ): Promise<WorkoutSession> {
+    if (
+      !input.planId.trim() ||
+      !isLocalDate(input.localDate) ||
+      !input.idempotencyKey.trim()
+    ) {
+      throw new DataError('validation', 'Workout start input is invalid')
+    }
+
+    try {
+      return await this.database.transaction(
+        'rw',
+        [
+          this.database.trainingPlans,
+          this.database.exercises,
+          this.database.planExercises,
+          this.database.workoutSessions,
+          this.database.syncQueue,
+        ],
+        async () => {
+          const occurrenceKey = `${input.planId}:${input.localDate}`
+          const existing = await this.database.workoutSessions
+            .where('scheduleOccurrenceKey')
+            .equals(occurrenceKey)
+            .filter(
+              (session) =>
+                !session.deletedAt && session.status !== 'cancelled',
+            )
+            .first()
+          if (existing) return existing
+
+          const plan = await this.database.trainingPlans.get(input.planId)
+          if (!plan || plan.deletedAt) {
+            throw new WorkoutMutationError(
+              'not_found',
+              `Training plan ${input.planId} was not found`,
+            )
+          }
+          if (plan.status !== 'active') {
+            throw new WorkoutMutationError(
+              'invalid_transition',
+              `Training plan ${input.planId} cannot start a workout`,
+            )
+          }
+
+          const planExercises = (
+            await this.database.planExercises
+              .where('planId')
+              .equals(input.planId)
+              .sortBy('position')
+          ).filter((item) => !item.deletedAt)
+          const exercises = await this.database.exercises.bulkGet(
+            planExercises.map((item) => item.exerciseId),
+          )
+          const timestamp = dependencies.now()
+          const exerciseResults = planExercises.map((planExercise, index) => {
+            const exercise = exercises[index]
+            if (!exercise || exercise.deletedAt) {
+              throw new WorkoutMutationError(
+                'not_found',
+                `Exercise ${planExercise.exerciseId} was not found`,
+              )
+            }
+            return {
+              id: dependencies.createId(),
+              sourcePlanExerciseId: planExercise.id,
+              exercise: {
+                exerciseId: exercise.id,
+                name: exercise.name,
+                type: exercise.type,
+              },
+              position: planExercise.position,
+              target: planExercise.target,
+              sets: [],
+            }
+          })
+          if (exerciseResults.length === 0) {
+            throw new WorkoutMutationError(
+              'validation',
+              `Training plan ${input.planId} has no exercises`,
+            )
+          }
+
+          const session: WorkoutSession = {
+            id: dependencies.createId(),
+            planId: plan.id,
+            scheduleOccurrenceKey: occurrenceKey,
+            planName: plan.name,
+            status: 'active',
+            startedAt: timestamp,
+            activeExerciseResultId: exerciseResults[0]?.id,
+            activeSetNumber: 1,
+            exercises: exerciseResults,
+            idempotencyKey: input.idempotencyKey,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            sync: { status: 'pending' },
+          }
+          const queueItem = createSyncQueueItem({
+            entityType: 'workout-session',
+            entityId: session.id,
+            operation: 'upsert',
+            payload: session,
+            priority: SYNC_PRIORITY.workoutSession,
+            idempotencyKey: session.idempotencyKey,
+          })
+
+          await this.database.workoutSessions.add(session)
+          await this.queueRepository.putLatest(queueItem)
+          return session
+        },
+      )
+    } catch (error) {
+      if (error instanceof WorkoutMutationError) {
+        throw new DataError(error.code, error.message)
+      }
+      throw error
+    }
+  }
+
+  async transitionWorkoutSession(
+    sessionId: string,
+    command: WorkoutTransitionCommand,
+    dependencies: WorkoutRuntimeDependencies = {
+      createId: createEntityId,
+      now: nowIso,
+    },
+  ): Promise<WorkoutSession> {
+    try {
+      return await this.database.transaction(
+        'rw',
+        [this.database.workoutSessions, this.database.syncQueue],
+        async () => {
+          const current = await this.database.workoutSessions.get(sessionId)
+          if (!current || current.deletedAt) {
+            throw new WorkoutMutationError(
+              'not_found',
+              `Workout session ${sessionId} was not found`,
+            )
+          }
+
+          const transitioned = transitionWorkout(
+            current,
+            command,
+            dependencies.now(),
+          )
+          if (transitioned === current) return current
+          const session: WorkoutSession = {
+            ...transitioned,
+            sync: { ...transitioned.sync, status: 'pending', error: undefined },
+          }
+          const queueItem = createSyncQueueItem({
+            entityType: 'workout-session',
+            entityId: session.id,
+            operation: 'upsert',
+            payload: session,
+            priority: SYNC_PRIORITY.workoutSession,
+            idempotencyKey: session.idempotencyKey,
+          })
+
+          await this.database.workoutSessions.put(session)
+          await this.queueRepository.putLatest(queueItem)
+          return session
+        },
+      )
+    } catch (error) {
+      if (error instanceof WorkoutMutationError) {
+        throw new DataError(error.code, error.message)
+      }
+      if (error instanceof InvalidWorkoutTransitionError) {
+        throw new DataError('invalid_transition', error.message)
+      }
+      throw error
+    }
+  }
+
+  async completeWorkoutSet(
+    command: CompleteWorkoutSetCommand,
+    idempotencyKey: string,
+    dependencies: WorkoutRuntimeDependencies = {
+      createId: createEntityId,
+      now: nowIso,
+    },
+  ): Promise<CompleteWorkoutSetOutcome> {
+    if (!idempotencyKey.trim()) {
+      throw new DataError(
+        'validation',
+        'Set completion idempotency key is required',
+      )
+    }
+
+    try {
+      return await this.database.transaction(
+        'rw',
+        [this.database.workoutSessions, this.database.syncQueue],
+        async () => {
+          const current = await this.database.workoutSessions.get(
+            command.sessionId,
+          )
+          if (!current || current.deletedAt) {
+            throw new WorkoutMutationError(
+              'not_found',
+              `Workout session ${command.sessionId} was not found`,
+            )
+          }
+
+          const outcome = completeWorkoutSet(current, command, {
+            id: dependencies.createId(),
+            completedAt: dependencies.now(),
+            idempotencyKey,
+          })
+          if (outcome.session === current) return outcome
+
+          const session: WorkoutSession = {
+            ...outcome.session,
+            sync: {
+              ...outcome.session.sync,
+              status: 'pending',
+              error: undefined,
+            },
+          }
+          const queueItem = createSyncQueueItem({
+            entityType: 'workout-session',
+            entityId: session.id,
+            operation: 'upsert',
+            payload: {
+              sessionId: session.id,
+              exerciseResultId: command.exerciseResultId,
+              set: outcome.set,
+            },
+            priority: SYNC_PRIORITY.workoutSession,
+            idempotencyKey,
+            dedupeKey: `workout-session:${session.id}:set:${command.exerciseResultId}:${command.setNumber}`,
+          })
+
+          await this.database.workoutSessions.put(session)
+          await this.queueRepository.putLatest(queueItem)
+          return { session, set: outcome.set }
+        },
+      )
+    } catch (error) {
+      if (error instanceof WorkoutMutationError) {
+        throw new DataError(error.code, error.message)
+      }
+      if (error instanceof InvalidWorkoutSetError) {
+        throw new DataError('validation', error.message)
+      }
+      if (error instanceof InvalidWorkoutTransitionError) {
+        throw new DataError('invalid_transition', error.message)
+      }
+      throw error
+    }
   }
 
   async saveStatisticsCache(cache: StatisticsCache): Promise<void> {
