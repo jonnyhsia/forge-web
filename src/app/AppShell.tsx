@@ -3,6 +3,7 @@ import { resolveAppRoute, type NavigationSection } from '../router/route-model'
 import { useForgeStore } from '../store'
 import { Button, StatePanel } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
+import { PwaNotices } from '../pwa/PwaNotices'
 import { resolveAppShellState } from './app-shell-state'
 import './app-shell.css'
 
@@ -41,6 +42,8 @@ export function AppShell() {
           <span>网络已恢复 · 正在检查待同步更改</span>
         </div>
       ) : null}
+
+      <PwaNotices showInstall={route.shell === 'standard' && state.content === 'ready'} />
 
       <main className="app-content">
         {state.content === 'loading' ? (

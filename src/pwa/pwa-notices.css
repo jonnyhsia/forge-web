@@ -1,0 +1,51 @@
+.pwa-notice {
+  width: 100%;
+  max-width: var(--content-max);
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  align-self: center;
+  gap: var(--space-4);
+  padding: var(--space-3) max(var(--space-4), env(safe-area-inset-right)) var(--space-3) max(var(--space-4), env(safe-area-inset-left));
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.pwa-notice--update { border-color: rgb(192 255 0 / 22%); }
+.pwa-notice--ready { color: var(--color-accent); }
+
+.pwa-notice__copy,
+.pwa-notice__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pwa-notice__copy { min-width: 0; }
+.pwa-notice__copy > svg { flex: 0 0 auto; color: var(--color-accent); }
+.pwa-notice__copy strong,
+.pwa-notice__copy span { display: block; }
+.pwa-notice__copy strong { color: var(--color-text); font-size: var(--text-sm); }
+.pwa-notice__copy span { margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--text-xs); line-height: 1.4; }
+.pwa-notice .ui-button { min-height: 2.25rem; flex: 0 0 auto; padding-inline: var(--space-3); font-size: var(--text-xs); }
+
+.pwa-ios-guide {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+@media (max-width: 30rem) {
+  .pwa-notice,
+  .pwa-notice__actions { align-items: stretch; }
+  .pwa-notice { flex-direction: column; }
+  .pwa-notice__actions { width: 100%; }
+  .pwa-notice__actions .ui-button { flex: 1; }
+  .pwa-notice--install,
+  .pwa-notice--ready { flex-direction: row; align-items: center; }
+}
