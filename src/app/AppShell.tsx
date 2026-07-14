@@ -24,6 +24,7 @@ export function AppShell() {
   const initialized = useForgeStore((state) => state.initialized)
   const initializationError = useForgeStore((state) => state.initializationError)
   const online = useForgeStore((state) => state.online)
+  const networkStatus = useForgeStore((state) => state.networkStatus)
   const initialize = useForgeStore((state) => state.initialize)
   const state = resolveAppShellState({ initialized, initializationError, online })
 
@@ -33,6 +34,11 @@ export function AppShell() {
         <div className="offline-banner" role="status">
           <Icon name="cloud-off" size={15} />
           <span>离线模式 · 本地数据仍可使用</span>
+        </div>
+      ) : networkStatus === 'recovering' ? (
+        <div className="offline-banner" role="status">
+          <Icon name="refresh" size={15} />
+          <span>网络已恢复 · 正在检查待同步更改</span>
         </div>
       ) : null}
 

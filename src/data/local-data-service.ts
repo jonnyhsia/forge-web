@@ -118,6 +118,8 @@ export class LocalDataService {
         planExercises: pendingPlanExercises,
       },
       priority: SYNC_PRIORITY.trainingPlan,
+      baseRemoteVersion: plan.sync.remoteVersion,
+      clientUpdatedAt: pendingPlan.updatedAt,
     })
 
     try {
@@ -280,6 +282,8 @@ export class LocalDataService {
             payload: session,
             priority: SYNC_PRIORITY.workoutSession,
             idempotencyKey: session.idempotencyKey,
+            baseRemoteVersion: session.sync.remoteVersion,
+            clientUpdatedAt: session.updatedAt,
           })
 
           await this.database.workoutSessions.add(session)
@@ -332,7 +336,8 @@ export class LocalDataService {
             operation: 'upsert',
             payload: session,
             priority: SYNC_PRIORITY.workoutSession,
-            idempotencyKey: session.idempotencyKey,
+            baseRemoteVersion: current.sync.remoteVersion,
+            clientUpdatedAt: session.updatedAt,
           })
 
           await this.database.workoutSessions.put(session)
@@ -391,7 +396,8 @@ export class LocalDataService {
               operation: 'upsert',
               payload: session,
               priority: SYNC_PRIORITY.workoutSession,
-              idempotencyKey: session.idempotencyKey,
+              baseRemoteVersion: current.sync.remoteVersion,
+              clientUpdatedAt: session.updatedAt,
             }),
           )
           return session
@@ -462,6 +468,8 @@ export class LocalDataService {
             priority: SYNC_PRIORITY.workoutSession,
             idempotencyKey,
             dedupeKey: `workout-session:${session.id}:set:${command.exerciseResultId}:${command.setNumber}`,
+            baseRemoteVersion: current.sync.remoteVersion,
+            clientUpdatedAt: session.updatedAt,
           })
 
           await this.database.workoutSessions.put(session)
@@ -484,7 +492,22 @@ export class LocalDataService {
   }
 
   async saveStatisticsCache(cache: StatisticsCache): Promise<void> {
-    await this.database.statisticsCaches.put(cache)
+    const queueItem = createSyncQueueItem({
+      entityType: 'statistics',
+      entityId: cache.key,
+      operation: 'upsert',
+      payload: cache,
+      priority: SYNC_PRIORITY.statistics,
+      clientUpdatedAt: cache.generatedAt,
+    })
+    await this.database.transaction(
+      'rw',
+      [this.database.statisticsCaches, this.database.syncQueue],
+      async () => {
+        await this.database.statisticsCaches.put(cache)
+        await this.queueRepository.putLatest(queueItem)
+      },
+    )
   }
 
   async saveSettings(settings: AppSettings): Promise<void> {
@@ -505,6 +528,8 @@ export class LocalDataService {
       payload: entity,
       priority,
       idempotencyKey,
+      baseRemoteVersion: entity.sync.remoteVersion,
+      clientUpdatedAt: entity.updatedAt,
     })
 
     await this.database.transaction(

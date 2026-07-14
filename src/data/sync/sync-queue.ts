@@ -6,6 +6,22 @@ import type {
   SyncQueueItem,
 } from '../../domain/sync'
 
+type SyncQueueMutationListener = () => void
+const mutationListeners = new Set<SyncQueueMutationListener>()
+
+export function subscribeSyncQueueMutations(
+  listener: SyncQueueMutationListener,
+): () => void {
+  mutationListeners.add(listener)
+  return () => mutationListeners.delete(listener)
+}
+
+function notifyMutation(): void {
+  globalThis.setTimeout(() => {
+    for (const listener of mutationListeners) listener()
+  }, 0)
+}
+
 export interface EnqueueSyncInput {
   entityType: SyncEntityType
   entityId: string
@@ -14,10 +30,15 @@ export interface EnqueueSyncInput {
   priority: number
   idempotencyKey?: string
   dedupeKey?: string
+  baseRemoteVersion?: number
+  clientUpdatedAt?: string
 }
 
 function createDedupeKey(input: EnqueueSyncInput): string {
-  return input.dedupeKey ?? `${input.entityType}:${input.entityId}`
+  return (
+    input.dedupeKey ??
+    `${input.entityType}:${input.entityId}:${input.operation}`
+  )
 }
 
 export function createSyncQueueItem(input: EnqueueSyncInput): SyncQueueItem {
@@ -37,6 +58,8 @@ export function createSyncQueueItem(input: EnqueueSyncInput): SyncQueueItem {
     createdAt: timestamp,
     updatedAt: timestamp,
     nextAttemptAt: timestamp,
+    baseRemoteVersion: input.baseRemoteVersion,
+    clientUpdatedAt: input.clientUpdatedAt ?? timestamp,
   }
 }
 
@@ -48,10 +71,20 @@ export class SyncQueueRepository {
   }
 
   async putLatest(item: SyncQueueItem): Promise<void> {
-    const existing = await this.database.syncQueue
+    let existing = await this.database.syncQueue
       .where('dedupeKey')
       .equals(item.dedupeKey)
       .first()
+    const legacyDedupeKey = `${item.entityType}:${item.entityId}`
+    if (
+      !existing &&
+      item.dedupeKey === `${legacyDedupeKey}:${item.operation}`
+    ) {
+      existing = await this.database.syncQueue
+        .where('dedupeKey')
+        .equals(legacyDedupeKey)
+        .first()
+    }
 
     if (existing) {
       await this.database.syncQueue.put({
@@ -59,10 +92,12 @@ export class SyncQueueRepository {
         id: existing.id,
         createdAt: existing.createdAt,
       })
+      notifyMutation()
       return
     }
 
     await this.database.syncQueue.put(item)
+    notifyMutation()
   }
 
   countPending(): Promise<number> {
@@ -70,6 +105,22 @@ export class SyncQueueRepository {
       .where('status')
       .anyOf(['pending', 'processing', 'failed', 'conflict'])
       .count()
+  }
+
+  listAll(): Promise<SyncQueueItem[]> {
+    return this.database.syncQueue
+      .toArray()
+      .then((items) =>
+        items.sort(
+          (left, right) =>
+            right.priority - left.priority ||
+            left.createdAt.localeCompare(right.createdAt),
+        ),
+      )
+  }
+
+  get(id: string): Promise<SyncQueueItem | undefined> {
+    return this.database.syncQueue.get(id)
   }
 
   async listReady(at = nowIso()): Promise<SyncQueueItem[]> {
@@ -93,6 +144,32 @@ export class SyncQueueRepository {
 
   put(item: SyncQueueItem): Promise<string> {
     return this.database.syncQueue.put(item)
+  }
+
+  async retry(id: string, at = nowIso()): Promise<void> {
+    const item = await this.get(id)
+    if (!item || item.status === 'processing') return
+    await this.put({
+      ...item,
+      status: 'pending',
+      nextAttemptAt: at,
+      updatedAt: at,
+      lastError: undefined,
+    })
+  }
+
+  async nextAttemptAt(): Promise<string | null> {
+    const candidates = await this.database.syncQueue
+      .where('status')
+      .anyOf(['pending', 'failed'])
+      .toArray()
+    return candidates.reduce<string | null>(
+      (earliest, item) =>
+        earliest === null || item.nextAttemptAt < earliest
+          ? item.nextAttemptAt
+          : earliest,
+      null,
+    )
   }
 }
 

@@ -30,7 +30,10 @@ export interface SyncQueueItem {
   createdAt: IsoDateTime
   updatedAt: IsoDateTime
   nextAttemptAt: IsoDateTime
+  baseRemoteVersion?: number
+  clientUpdatedAt: IsoDateTime
   lastError?: string
+  conflict?: SyncConflict
 }
 
 export interface SyncPushResult {
@@ -40,12 +43,15 @@ export interface SyncPushResult {
 
 export interface SyncConflict {
   reason: string
-  remotePayload?: unknown
+  remoteVersion: number
+  remotePayload: unknown
 }
 
 export type SyncTransportResult =
   | { status: 'success'; value: SyncPushResult }
   | { status: 'conflict'; conflict: SyncConflict }
+  | { status: 'transient-failure'; error: string }
+  | { status: 'permanent-failure'; error: string }
 
 export interface SyncTransport {
   push(item: SyncQueueItem): Promise<SyncTransportResult>

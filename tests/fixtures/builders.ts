@@ -193,6 +193,7 @@ export class FixtureFactory {
       createdAt: this.clock.nowIso(),
       updatedAt: this.clock.nowIso(),
       nextAttemptAt: this.clock.nowIso(),
+      clientUpdatedAt: this.clock.nowIso(),
       ...overrides,
     }
   }

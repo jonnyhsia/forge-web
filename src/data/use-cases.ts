@@ -366,9 +366,14 @@ class LocalSettingsUseCases implements SettingsUseCases {
 
 class LocalStatisticsUseCases implements StatisticsUseCases {
   private readonly database: ForgeDatabase
+  private readonly localData: LocalDataService
 
-  constructor(database: ForgeDatabase) {
+  constructor(
+    database: ForgeDatabase,
+    localData: LocalDataService,
+  ) {
     this.database = database
+    this.localData = localData
   }
 
   async list(): Promise<StatisticsCache[]> {
@@ -385,7 +390,7 @@ class LocalStatisticsUseCases implements StatisticsUseCases {
 
   async save(cache: StatisticsCache): Promise<StatisticsCache> {
     try {
-      await this.database.statisticsCaches.put(cache)
+      await this.localData.saveStatisticsCache(cache)
       return cache
     } catch (error) {
       throw toDataError(error)
@@ -411,7 +416,7 @@ class LocalStatisticsUseCases implements StatisticsUseCases {
         source: 'history',
         summary: calculateStatistics(range, history),
       }
-      await this.database.statisticsCaches.put(cache)
+      await this.localData.saveStatisticsCache(cache)
       return cache
     } catch (error) {
       throw toDataError(error)
@@ -523,7 +528,7 @@ export function createForgeDataUseCases(
       database,
       new DexieHistoryRepository(database),
     ),
-    statistics: new LocalStatisticsUseCases(database),
+    statistics: new LocalStatisticsUseCases(database, localData),
     settings: new LocalSettingsUseCases(database),
   }
 }

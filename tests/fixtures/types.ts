@@ -165,5 +165,7 @@ export interface SyncQueueItemFixture {
   createdAt: IsoDateTime
   updatedAt: IsoDateTime
   nextAttemptAt: IsoDateTime
+  baseRemoteVersion?: number
+  clientUpdatedAt: IsoDateTime
   lastError?: string
 }

@@ -20,6 +20,7 @@ import {
 } from '../notifications'
 import './shell-pages.css'
 import './dashboard.css'
+import './sync.css'
 
 function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -458,6 +459,14 @@ export function SettingsPage() {
   const plans = useForgeStore((state) => state.plans.items)
   const loadSettings = useForgeStore((state) => state.loadSettings)
   const updateSettings = useForgeStore((state) => state.updateSettings)
+  const online = useForgeStore((state) => state.online)
+  const syncMode = useForgeStore((state) => state.syncMode)
+  const syncQueue = useForgeStore((state) => state.syncQueue)
+  const loadSyncQueue = useForgeStore((state) => state.loadSyncQueue)
+  const retrySyncItem = useForgeStore((state) => state.retrySyncItem)
+  const acceptRemoteSyncItem = useForgeStore((state) => state.acceptRemoteSyncItem)
+  const keepLocalSyncItem = useForgeStore((state) => state.keepLocalSyncItem)
+  const runSyncNow = useForgeStore((state) => state.runSyncNow)
   const [pending, setPending] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const capability = browserReminderService.inspect()
@@ -474,6 +483,10 @@ export function SettingsPage() {
       () => setSaveError('通知状态暂时无法保存；站内提醒仍可使用。'),
     )
   }, [capability.permission, settings.status, settings.value, updateSettings])
+
+  useEffect(() => {
+    void loadSyncQueue()
+  }, [loadSyncQueue])
 
   if (!settings.value) {
     return (
@@ -526,6 +539,18 @@ export function SettingsPage() {
       await updateSettings({ [key]: true, notificationPermission: permission })
     } catch {
       setSaveError('提醒设置保存失败；站内计时仍可继续使用。')
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const runSyncAction = async (key: string, action: () => Promise<void>) => {
+    setPending(key)
+    setSaveError(null)
+    try {
+      await action()
+    } catch {
+      setSaveError('同步操作失败，请稍后重试。')
     } finally {
       setPending(null)
     }
@@ -595,9 +620,80 @@ export function SettingsPage() {
         </Card>
       </section>
 
+      <section className="settings-section" aria-labelledby="sync-status-title">
+        <h2 id="sync-status-title">备份与同步</h2>
+        <Card className="settings-sync">
+          <div className="settings-sync__summary">
+            <div>
+              <strong>{syncMode === 'local' ? '本地模式' : syncStatusTitle(syncQueue.value)}</strong>
+              <p>{syncMode === 'local' ? '尚未配置同步服务；更改会安全保留在本机队列中。' : `${syncQueue.value.length} 项更改等待处理。`}</p>
+            </div>
+            <Button
+              disabled={pending !== null || !online || syncMode === 'local' || syncQueue.value.length === 0}
+              onClick={() => void runSyncAction('sync-now', runSyncNow)}
+              variant="secondary"
+            >立即同步</Button>
+          </div>
+          {syncQueue.status === 'error' ? (
+            <div className="settings-sync__error">
+              <span>同步队列暂时无法读取。</span>
+              <Button onClick={() => void loadSyncQueue()} variant="ghost">重试读取</Button>
+            </div>
+          ) : null}
+          {syncQueue.value.map((item) => (
+            <div className="settings-sync__item" key={item.id}>
+              <div>
+                <strong>{syncEntityLabel(item.entityType)}</strong>
+                <small>{syncItemDescription(item, syncMode)}</small>
+              </div>
+              <div className="settings-sync__actions">
+                {item.status === 'conflict' ? (
+                  <>
+                    <Button disabled={pending !== null} onClick={() => void runSyncAction(item.id, () => keepLocalSyncItem(item.id))} variant="secondary">保留本地</Button>
+                    <Button disabled={pending !== null} onClick={() => void runSyncAction(item.id, () => acceptRemoteSyncItem(item.id))} variant="ghost">接受远端</Button>
+                  </>
+                ) : item.status === 'failed' ? (
+                  <Button disabled={pending !== null || !online || syncMode === 'local'} onClick={() => void runSyncAction(item.id, () => retrySyncItem(item.id))} variant="secondary">重试</Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </Card>
+      </section>
+
       {saveError ? <p className="settings-error" role="alert">{saveError}</p> : null}
     </Page>
   )
+}
+
+function syncStatusTitle(items: Array<{ status: string }>) {
+  if (items.some((item) => item.status === 'conflict')) return '有同步冲突待处理'
+  if (items.some((item) => item.status === 'failed')) return '部分更改同步失败'
+  if (items.some((item) => item.status === 'processing')) return '正在同步'
+  return items.length > 0 ? '等待同步' : '已同步'
+}
+
+function syncEntityLabel(entityType: string) {
+  if (entityType === 'workout-session') return '训练记录'
+  if (entityType === 'training-plan') return '训练计划'
+  if (entityType === 'exercise') return '动作'
+  return '统计缓存'
+}
+
+function syncItemDescription(
+  item: { status: string; attempts: number; lastError?: string; nextAttemptAt: string },
+  mode: 'local' | 'remote',
+) {
+  if (item.status === 'conflict') return item.lastError ?? '本地与远端版本冲突，请选择保留版本。'
+  if (item.status === 'failed') {
+    const retry = item.nextAttemptAt.startsWith('9999-')
+      ? '需要手动重试'
+      : `下次重试 ${formatDateTime(item.nextAttemptAt)}`
+    return `${item.lastError ?? '同步失败'} · ${retry}`
+  }
+  if (item.status === 'processing') return '正在发送，不影响本地使用。'
+  if (mode === 'local') return '已保留在本机，配置同步服务后可处理。'
+  return item.attempts > 0 ? `等待重试，已尝试 ${item.attempts} 次。` : '等待网络可用后自动同步。'
 }
 
 function ReminderToggle({ label, description, checked, disabled, onChange }: { label: string; description: string; checked: boolean; disabled: boolean; onChange: () => void }) {

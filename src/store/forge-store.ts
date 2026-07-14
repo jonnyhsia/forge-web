@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   createForgeDataUseCases,
+  browserSyncRuntime,
   forgeDatabase,
   localDataService,
   syncQueueRepository,
@@ -12,6 +13,8 @@ import {
   type PlansFilter,
   type SettingsPatch,
   type StartWorkoutInput,
+  type SyncMode,
+  type NetworkSyncStatus,
 } from '../data'
 import type {
   AppSettings,
@@ -26,6 +29,7 @@ import type {
   CompleteWorkoutSetCommand,
   CompleteWorkoutSetOutcome,
   WorkoutTimerState,
+  SyncQueueItem,
 } from '../domain'
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -53,6 +57,14 @@ export interface ForgeStoreDependencies {
   countPendingSync(): Promise<number>
   pageLimit?: number
   now?: () => string
+  sync?: {
+    mode: SyncMode
+    list(): Promise<SyncQueueItem[]>
+    retry(itemId: string): Promise<void>
+    acceptRemote(itemId: string): Promise<void>
+    keepLocal(itemId: string): Promise<void>
+    runNow(): Promise<void>
+  }
 }
 
 export interface LoadPlansOptions {
@@ -69,7 +81,10 @@ export interface ForgeState {
   initializing: boolean
   initializationError: DataError | null
   online: boolean
+  networkStatus: NetworkSyncStatus
+  syncMode: SyncMode
   pendingSyncCount: number
+  syncQueue: ResourceSlice<SyncQueueItem[]>
   dashboard: ResourceSlice<DashboardSnapshot | null>
   plans: PlansSlice
   planDetails: Record<EntityId, ResourceSlice<PlanAggregate | null>>
@@ -80,6 +95,12 @@ export interface ForgeState {
   settings: ResourceSlice<AppSettings | null>
   initialize: () => Promise<void>
   setOnline: (online: boolean) => void
+  setNetworkStatus: (status: NetworkSyncStatus) => void
+  loadSyncQueue: () => Promise<void>
+  retrySyncItem: (itemId: string) => Promise<void>
+  acceptRemoteSyncItem: (itemId: string) => Promise<void>
+  keepLocalSyncItem: (itemId: string) => Promise<void>
+  runSyncNow: () => Promise<void>
   loadDashboard: (range: DashboardRange) => Promise<void>
   loadPlans: (options?: LoadPlansOptions) => Promise<void>
   loadPlan: (planId: EntityId) => Promise<void>
@@ -142,7 +163,11 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     initializing: false,
     initializationError: null,
     online: typeof navigator === 'undefined' ? true : navigator.onLine,
+    networkStatus:
+      typeof navigator === 'undefined' || navigator.onLine ? 'online' : 'offline',
+    syncMode: dependencies.sync?.mode ?? 'local',
     pendingSyncCount: 0,
+    syncQueue: emptyResource([]),
     dashboard: emptyResource(null),
     plans: emptyPlans(),
     planDetails: {},
@@ -167,6 +192,7 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
               get().loadHistory({ reset: true }),
               get().loadStatistics(),
               get().loadSettings(),
+              get().loadSyncQueue(),
             ])
             set({ initialized: true, initializing: false, pendingSyncCount })
           })
@@ -182,7 +208,66 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       await initialization
     },
 
-    setOnline: (online) => set({ online }),
+    setOnline: (online) =>
+      set({ online, networkStatus: online ? 'online' : 'offline' }),
+
+    setNetworkStatus: (networkStatus) =>
+      set({ online: networkStatus !== 'offline', networkStatus }),
+
+    loadSyncQueue: async () => {
+      if (!dependencies.sync) {
+        set({ syncQueue: { value: [], status: 'ready', error: null } })
+        return
+      }
+      set({
+        syncQueue: { ...get().syncQueue, status: 'loading', error: null },
+      })
+      try {
+        const value = await dependencies.sync.list()
+        set({
+          pendingSyncCount: value.length,
+          syncQueue: { value, status: 'ready', error: null },
+        })
+      } catch (error) {
+        set({
+          syncQueue: {
+            ...get().syncQueue,
+            status: 'error',
+            error: toDataError(error),
+          },
+        })
+      }
+    },
+
+    retrySyncItem: async (itemId) => {
+      if (!dependencies.sync) return
+      await dependencies.sync.retry(itemId)
+      await get().loadSyncQueue()
+    },
+
+    acceptRemoteSyncItem: async (itemId) => {
+      if (!dependencies.sync) return
+      await dependencies.sync.acceptRemote(itemId)
+      await Promise.all([
+        get().loadSyncQueue(),
+        get().loadPlans({ reset: true }),
+        get().loadWorkout(),
+        get().loadHistory({ reset: true }),
+        get().loadStatistics(),
+      ])
+    },
+
+    keepLocalSyncItem: async (itemId) => {
+      if (!dependencies.sync) return
+      await dependencies.sync.keepLocal(itemId)
+      await get().loadSyncQueue()
+    },
+
+    runSyncNow: async () => {
+      if (!dependencies.sync) return
+      await dependencies.sync.runNow()
+      await get().loadSyncQueue()
+    },
 
     loadDashboard: async (range) => {
       const previous = get().dashboard
@@ -588,7 +673,11 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       try {
         await dependencies.data.statistics.rebuild(range, dependencies.now?.())
         const value = await dependencies.data.statistics.list()
-        set({ statistics: { value, status: 'ready', error: null } })
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({
+          pendingSyncCount,
+          statistics: { value, status: 'ready', error: null },
+        })
       } catch (error) {
         set({
           statistics: {
@@ -603,6 +692,8 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     saveStatistics: async (cache) => {
       try {
         await dependencies.data.statistics.save(cache)
+        const pendingSyncCount = await dependencies.countPendingSync()
+        set({ pendingSyncCount })
         await get().loadStatistics()
       } catch (error) {
         const dataError = toDataError(error)
@@ -663,4 +754,5 @@ export const useForgeStore = createForgeStore({
   initialize: () => localDataService.initialize(),
   data: createForgeDataUseCases(forgeDatabase),
   countPendingSync: () => syncQueueRepository.countPending(),
+  sync: browserSyncRuntime,
 })
