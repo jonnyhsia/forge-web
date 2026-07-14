@@ -69,6 +69,7 @@ export interface ForgeState {
   plans: PlansSlice
   planDetails: Record<EntityId, ResourceSlice<PlanAggregate | null>>
   history: PageSlice<WorkoutSession>
+  historyDetails: Record<EntityId, ResourceSlice<WorkoutSession | null>>
   workouts: ResourceSlice<WorkoutSession | null>
   statistics: ResourceSlice<StatisticsCache[]>
   settings: ResourceSlice<AppSettings | null>
@@ -80,6 +81,7 @@ export interface ForgeState {
   archivePlan: (planId: EntityId) => Promise<void>
   deletePlan: (planId: EntityId) => Promise<void>
   loadHistory: (options?: LoadPageOptions) => Promise<void>
+  loadHistoryDetail: (sessionId: EntityId) => Promise<void>
   loadWorkout: (sessionId?: EntityId) => Promise<void>
   startWorkout: (input: StartWorkoutInput) => Promise<WorkoutSession>
   transitionWorkout: (
@@ -137,6 +139,7 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     plans: emptyPlans(),
     planDetails: {},
     history: emptyPage(),
+    historyDetails: {},
     workouts: emptyResource(null),
     statistics: emptyResource([]),
     settings: emptyResource(null),
@@ -355,6 +358,37 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
             ...previous,
             status: 'error',
             error: toDataError(error),
+          },
+        })
+      }
+    },
+
+    loadHistoryDetail: async (sessionId) => {
+      const previous = get().historyDetails[sessionId] ?? emptyResource(null)
+      set({
+        historyDetails: {
+          ...get().historyDetails,
+          [sessionId]: { ...previous, status: 'loading', error: null },
+        },
+      })
+
+      try {
+        const value = await dependencies.data.history.getDetail(sessionId)
+        set({
+          historyDetails: {
+            ...get().historyDetails,
+            [sessionId]: { value, status: 'ready', error: null },
+          },
+        })
+      } catch (error) {
+        set({
+          historyDetails: {
+            ...get().historyDetails,
+            [sessionId]: {
+              ...previous,
+              status: 'error',
+              error: toDataError(error),
+            },
           },
         })
       }

@@ -158,6 +158,51 @@ describe('次数型训练 UI adapter', () => {
       completeSet.mock.calls[0]?.[0],
     )
   })
+
+  it('最后一组后要求确认完成，并从持久化会话生成总结视图', async () => {
+    const ready = repetitionSession({
+      activeExerciseResultId: undefined,
+      activeSetNumber: undefined,
+      exercises: [{
+        ...repetitionSession().exercises[0]!,
+        target: { ...repetitionSession().exercises[0]!.target, targetSets: 1 },
+        sets: [{
+          ...repetitionSession().exercises[0]!.sets[0]!,
+          setNumber: 1,
+        }],
+      }],
+    })
+    const completed = repetitionSession({
+      status: 'completed',
+      endedAt: '2026-07-14T08:20:00.000Z',
+      activeExerciseResultId: undefined,
+      activeSetNumber: undefined,
+      exercises: ready.exercises,
+    })
+    const transition = vi.fn().mockResolvedValue(completed)
+    const adapter = createTrainingUiAdapter({
+      createId: () => 'unused',
+      gateway: {
+        start: vi.fn(),
+        get: vi.fn().mockResolvedValue(ready),
+        transition,
+        completeSet: vi.fn(),
+      },
+    })
+
+    const view = await adapter.open({ type: 'resume', sessionId: ready.id })
+    expect(view).toMatchObject({ kind: 'unavailable', reason: 'finished' })
+    if (view.kind !== 'unavailable') throw new Error('Expected finished view')
+
+    await expect(adapter.completeTraining(view)).resolves.toMatchObject({
+      kind: 'completed',
+      sessionId: 'session-1',
+      totalSets: 1,
+      exercises: [{ exerciseName: '卧推', completedSets: 1, totalSets: 1 }],
+      durationSeconds: 1200,
+    })
+    expect(transition).toHaveBeenCalledWith('session-1', { type: 'complete' })
+  })
 })
 
 describe('时间型与休息训练 UI adapter', () => {

@@ -388,6 +388,30 @@ describe('feature store', () => {
     }
   })
 
+  it('loads a completed history detail independently from the history page', async () => {
+    const database = new ForgeDatabase('forge-t09-history-detail-store')
+    const store = createForgeStore({
+      initialize: () => database.open().then(() => undefined),
+      data: createForgeDataUseCases(database),
+      countPendingSync: () => database.syncQueue.count(),
+    })
+    const completed = completedSession('session-detail', timestamp)
+
+    try {
+      await database.workoutSessions.put(completed)
+      await store.getState().loadHistoryDetail(completed.id)
+
+      expect(store.getState().historyDetails[completed.id]).toEqual({
+        value: completed,
+        status: 'ready',
+        error: null,
+      })
+      expect(store.getState().history.status).toBe('idle')
+    } finally {
+      database.close()
+    }
+  })
+
   it('initializes each feature slice through its independent loader', async () => {
     const database = new ForgeDatabase('forge-t03-initialize-store')
     const store = createForgeStore({

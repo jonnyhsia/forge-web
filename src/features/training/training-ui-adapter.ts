@@ -82,10 +82,29 @@ export interface UnavailableTrainingView {
   exerciseName?: string
 }
 
+export interface CompletedTrainingExerciseSummary {
+  exerciseName: string
+  completedSets: number
+  totalSets: number
+}
+
+export interface CompletedTrainingView {
+  kind: 'completed'
+  sessionId: string
+  planName: string
+  sessionStatus: 'completed'
+  startedAt?: string
+  endedAt: string
+  durationSeconds?: number
+  totalSets: number
+  exercises: CompletedTrainingExerciseSummary[]
+}
+
 export type TrainingView =
   | RepetitionTrainingView
   | DurationTrainingView
   | RestTrainingView
+  | CompletedTrainingView
   | UnavailableTrainingView
 
 export interface RepetitionSetInput {
@@ -110,6 +129,7 @@ export interface TrainingUiAdapter {
     input: RepetitionSetInput | DurationSetInput,
   ): Promise<TrainingView>
   finishRest(view: RestTrainingView): Promise<TrainingView>
+  completeTraining(view: UnavailableTrainingView): Promise<CompletedTrainingView>
   refreshTimer(view: DurationTrainingView | RestTrainingView, now?: string): TrainingView
   decide(view: TrainingView, decision: TrainingDecision): Promise<TrainingDecisionOutcome>
 }
@@ -155,6 +175,37 @@ function toTimerView(
 }
 
 function toTrainingView(session: WorkoutSession, now: string): TrainingView {
+  if (session.status === 'completed' && session.endedAt) {
+    return {
+      kind: 'completed',
+      sessionId: session.id,
+      planName: session.planName,
+      sessionStatus: 'completed',
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      durationSeconds:
+        session.startedAt
+          ? Math.max(
+              0,
+              Math.floor(
+                (Date.parse(session.endedAt) - Date.parse(session.startedAt)) /
+                  1000,
+              ),
+            )
+          : undefined,
+      totalSets: session.exercises.reduce(
+        (count, exercise) => count + exercise.sets.length,
+        0,
+      ),
+      exercises: [...session.exercises]
+        .sort((left, right) => left.position - right.position)
+        .map((exercise) => ({
+          exerciseName: exercise.exercise.name,
+          completedSets: exercise.sets.length,
+          totalSets: exercise.target.targetSets,
+        })),
+    }
+  }
   if (session.status !== 'active' && session.status !== 'paused') {
     return { kind: 'unavailable', sessionId: session.id, planName: session.planName, sessionStatus: session.status, reason: 'terminal' }
   }
@@ -262,6 +313,16 @@ export function createTrainingUiAdapter(options: TrainingUiAdapterOptions): Trai
 
     async finishRest(view) {
       return toTrainingView(await saveTimer(view.sessionId, undefined), now())
+    },
+
+    async completeTraining(view) {
+      if (view.reason !== 'finished') {
+        throw new Error('Training is not ready to complete')
+      }
+      return toTrainingView(
+        await options.gateway.transition(view.sessionId, { type: 'complete' }),
+        now(),
+      ) as CompletedTrainingView
     },
 
     refreshTimer(view, timestamp = now()) {

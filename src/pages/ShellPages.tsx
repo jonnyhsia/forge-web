@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Card, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
+import { useForgeStore } from '../store'
 import './shell-pages.css'
 
 function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children: ReactNode }) {
@@ -43,17 +44,85 @@ export function DashboardPage() {
 }
 
 export function HistoryPage() {
+  const history = useForgeStore((state) => state.history)
+  const loadHistory = useForgeStore((state) => state.loadHistory)
+
+  useEffect(() => {
+    void loadHistory({ reset: true })
+  }, [loadHistory])
+
   return (
     <Page title="记录">
       <RecordSegments active="history" />
-      <StatePanel kind="empty" title="暂无训练记录" description="完成第一场训练后，记录会显示在这里。" />
+      {history.status === 'loading' && history.items.length === 0 ? (
+        <StatePanel kind="loading" title="读取训练记录" description="正在读取本地完成快照。" />
+      ) : history.status === 'error' ? (
+        <StatePanel kind="error" title="记录读取失败" description={history.error?.message ?? '请重试。'} />
+      ) : history.items.length === 0 ? (
+        <StatePanel kind="empty" title="暂无训练记录" description="完成第一场训练后，记录会显示在这里。" />
+      ) : (
+        <div className="history-list">
+          {history.items.map((session) => (
+            <Link className="history-card" key={session.id} to={`/history/${session.id}`}>
+              <span>
+                <strong>{session.planName}</strong>
+                <small>{formatDateTime(session.endedAt)}</small>
+              </span>
+              <span className="history-card__meta">
+                <small>{session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)} 组</small>
+                <Icon name="chevron-right" size={14} />
+              </span>
+            </Link>
+          ))}
+          {history.nextCursor ? <button className="ui-button ui-button--secondary" onClick={() => void loadHistory()}>加载更多</button> : null}
+        </div>
+      )}
     </Page>
   )
 }
 
 export function HistoryDetailPage() {
   const { sessionId } = useParams()
-  return <FocusedPlaceholder backTo="/history" eyebrow="返回记录" title="训练详情" description={`会话 ${sessionId ?? ''} 的完成快照将在 T09 接入。`} />
+  const navigate = useNavigate()
+  const resource = useForgeStore((state) => sessionId ? state.historyDetails[sessionId] : undefined)
+  const loadHistoryDetail = useForgeStore((state) => state.loadHistoryDetail)
+
+  useEffect(() => {
+    if (sessionId) void loadHistoryDetail(sessionId)
+  }, [loadHistoryDetail, sessionId])
+
+  if (!sessionId || resource?.status === 'error') {
+    return <FocusedPlaceholder backTo="/history" eyebrow="返回记录" title="训练详情" description={resource?.error?.message ?? '缺少训练记录编号。'} />
+  }
+  if (resource?.status !== 'ready' || !resource.value) {
+    return <div className="focused-page"><StatePanel kind="loading" title="读取训练详情" description="正在读取完成快照。" /></div>
+  }
+
+  const session = resource.value
+  return (
+    <div className="focused-page">
+      <BackHeader label="返回记录" title="训练详情" to="/history" />
+      <div className="history-detail">
+        <Card className="history-detail__hero">
+          <p className="page-eyebrow">COMPLETED WORKOUT</p>
+          <h2>{session.planName}</h2>
+          <p>{formatDateTime(session.endedAt)} · {session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)} 组</p>
+        </Card>
+        {session.exercises.map((exercise) => (
+          <Card className="history-detail__exercise" key={exercise.id}>
+            <div className="history-detail__heading"><strong>{exercise.exercise.name}</strong><span>{exercise.sets.length} / {exercise.target.targetSets} 组</span></div>
+            {exercise.sets.map((set) => (
+              <div className="history-detail__set" key={set.id}>
+                <span>第 {set.setNumber} 组</span>
+                <strong>{formatSet(set)}</strong>
+              </div>
+            ))}
+          </Card>
+        ))}
+        <button className="ui-button ui-button--secondary" onClick={() => navigate('/history')}>返回历史记录</button>
+      </div>
+    </div>
+  )
 }
 
 export function StatisticsPage() {
@@ -109,4 +178,17 @@ function RecordSegments({ active }: { active: 'history' | 'statistics' }) {
       <Link aria-current={active === 'statistics' ? 'page' : undefined} className={active === 'statistics' ? 'segments__active' : ''} to="/statistics">数据统计</Link>
     </nav>
   )
+}
+
+function formatDateTime(value?: string) {
+  return value ? new Intl.DateTimeFormat('zh-TW', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '时间未知'
+}
+
+function formatSet(set: import('../domain').WorkoutSetResult) {
+  if (set.skipped) return '已跳过'
+  if ('durationSeconds' in set) return `${set.durationSeconds} 秒`
+  const weight = set.weight.mode === 'bodyweight' && set.weight.value === undefined
+    ? '体重'
+    : `${set.weight.mode === 'bodyweight' ? '+' : ''}${set.weight.value}${set.weight.unit}`
+  return `${weight} × ${set.repetitions} 次`
 }

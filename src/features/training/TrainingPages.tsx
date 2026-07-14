@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   useBlocker,
+  Link,
   useNavigate,
   useParams,
   useSearchParams,
@@ -15,6 +16,7 @@ import {
   type DurationSetInput,
   type DurationTrainingView,
   type RestTrainingView,
+  type CompletedTrainingView,
   type UnavailableTrainingView,
   type RepetitionTrainingView,
   type TrainingDecision,
@@ -231,8 +233,10 @@ export function TrainingSessionPage() {
         <DurationWorkout adapter={adapter} key={`${view.kind}:${view.exerciseResultId}:${view.activeSetNumber}:${view.sessionStatus}`} onChange={setView} onResume={() => void leaveAfterDecision('resume')} resumeError={decisionError} view={view} />
       ) : view.kind === 'rest' ? (
         <RestWorkout adapter={adapter} key={`${view.kind}:${view.exerciseResultId}:${view.activeSetNumber}:${view.sessionStatus}`} onChange={setView} onResume={() => void leaveAfterDecision('resume')} resumeError={decisionError} view={view} />
+      ) : view.kind === 'completed' ? (
+        <CompletedWorkout view={view} />
       ) : (
-        <UnavailableWorkout view={view} />
+        <UnavailableWorkout adapter={adapter} onChange={setView} view={view} />
       )}
 
       <Dialog
@@ -540,7 +544,9 @@ function NumberControl({
   )
 }
 
-function UnavailableWorkout({ view }: { view: UnavailableTrainingView }) {
+function UnavailableWorkout({ adapter, onChange, view }: { adapter: TrainingUiAdapter; onChange: (view: TrainingView) => void; view: UnavailableTrainingView }) {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const content =
     view.reason === 'duration'
       ? {
@@ -550,7 +556,7 @@ function UnavailableWorkout({ view }: { view: UnavailableTrainingView }) {
       : view.reason === 'finished'
         ? {
             title: '当前组已全部完成',
-            description: '训练完成确认与总结将在后续切片接入。',
+            description: '所有训练组已记录，确认后将保存本次训练并生成总结。',
           }
         : {
             title: '训练已经结束',
@@ -559,9 +565,57 @@ function UnavailableWorkout({ view }: { view: UnavailableTrainingView }) {
 
   return (
     <main className="training-content training-content--state">
-      <StatePanel description={content.description} kind="empty" title={content.title} />
+      <StatePanel
+        action={
+          view.reason === 'finished' ? (
+            <Button
+              disabled={pending}
+              onClick={() => {
+                if (!window.confirm('确认完成本次训练并保存记录？')) return
+                setPending(true)
+                setError(null)
+                void adapter
+                  .completeTraining(view)
+                  .then(onChange)
+                  .catch((cause: unknown) => setError(toDataError(cause).message))
+                  .finally(() => setPending(false))
+              }}
+            >
+              {pending ? '正在保存…' : '完成训练'}
+            </Button>
+          ) : undefined
+        }
+        description={error ? `${content.description} ${error}` : content.description}
+        kind={error ? 'error' : 'empty'}
+        title={content.title}
+      />
     </main>
   )
+}
+
+function CompletedWorkout({ view }: { view: CompletedTrainingView }) {
+  return (
+    <main className="training-content training-content--state">
+      <StatePanel
+        action={<LinkButton to={`/history/${view.sessionId}`}>查看训练详情</LinkButton>}
+        description={`共完成 ${view.totalSets} 组${view.durationSeconds !== undefined ? ` · 用时 ${formatDuration(view.durationSeconds)}` : ''}。`}
+        kind="empty"
+        title="训练已完成"
+      />
+      <Card className="training-summary">
+        {view.exercises.map((exercise) => (
+          <div key={exercise.exerciseName}>
+            <strong>{exercise.exerciseName}</strong>
+            <span>{exercise.completedSets} / {exercise.totalSets} 组</span>
+          </div>
+        ))}
+      </Card>
+    </main>
+  )
+}
+
+function LinkButton({ to, children }: { to: string; children: ReactNode }) {
+  return <Link className="ui-button ui-button--primary" to={to}>{children}</Link>
 }
 
 function formatWeight(weight: WeightValue) {
