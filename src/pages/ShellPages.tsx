@@ -1,10 +1,19 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Card, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
-import { rollingEightWeekRange, type StatisticsCache } from '../domain'
+import {
+  dashboardWeekRange,
+  rollingEightWeekRange,
+  type DashboardDay,
+  type DashboardDayStatus,
+  type DashboardOccurrence,
+  type StatisticsCache,
+  type WorkoutSession,
+} from '../domain'
 import './shell-pages.css'
+import './dashboard.css'
 
 function Page({ eyebrow, title, action, children }: { eyebrow?: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -31,16 +40,205 @@ function BackHeader({ to, label, title }: { to: string; label: string; title: st
 }
 
 export function DashboardPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const dashboard = useForgeStore((state) => state.dashboard)
+  const online = useForgeStore((state) => state.online)
+  const pendingSyncCount = useForgeStore((state) => state.pendingSyncCount)
+  const loadDashboard = useForgeStore((state) => state.loadDashboard)
+  const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
+  const requestedDate = searchParams.get('date')
+  const focusDate = isLocalDate(requestedDate) ? requestedDate : localDate()
+  const range = dashboardWeekRange(dateFromLocalDate(focusDate))
+  const selectedDate =
+    focusDate >= range.start && focusDate <= range.end ? focusDate : range.today
+  const dayRefs = useRef<Record<string, HTMLElement | null>>({})
+
+  useEffect(() => {
+    let current = true
+    void (async () => {
+      await rebuildStatistics(rollingEightWeekRange())
+      if (current) {
+        await loadDashboard({
+          start: range.start,
+          end: range.end,
+          today: range.today,
+        })
+      }
+    })()
+    return () => {
+      current = false
+    }
+  }, [loadDashboard, range.end, range.start, range.today, rebuildStatistics])
+
+  const selectDate = (nextDate: string) => {
+    setSearchParams(nextDate === range.today ? {} : { date: nextDate })
+    dayRefs.current[nextDate]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const snapshot = dashboard.value
+  const totalOccurrences = snapshot?.days.reduce(
+    (count, day) => count + day.occurrences.length,
+    0,
+  ) ?? 0
+  const completedOccurrences = snapshot?.days.reduce(
+    (count, day) =>
+      count + day.occurrences.filter((item) => item.status === 'completed').length,
+    0,
+  ) ?? 0
+
   return (
-    <Page eyebrow="LOCAL TRAINING" title="FORGE">
-      <Card className="hero-card">
-        <p className="hero-card__label">今日训练</p>
-        <h2>训练空间已就绪</h2>
-        <p>日程与今日进度将在 Dashboard 切片接入。</p>
-        <Progress label="本周进度" value={0} />
+    <Page
+      action={pendingSyncCount > 0 ? <span className="dashboard-sync-count">{pendingSyncCount} 项待同步</span> : null}
+      eyebrow="LOCAL TRAINING"
+      title="FORGE"
+    >
+      {!online || pendingSyncCount > 0 ? (
+        <div className="dashboard-connectivity" role="status">
+          {!online ? <span><Icon name="cloud-off" size={15} />离线模式，本地训练仍可使用</span> : null}
+          {pendingSyncCount > 0 ? <span>{pendingSyncCount} 项更改等待同步</span> : null}
+        </div>
+      ) : null}
+
+      <Card className="hero-card dashboard-hero">
+        <p className="hero-card__label">本周训练</p>
+        <h2>{completedOccurrences} / {totalOccurrences}</h2>
+        <p>{totalOccurrences === 0 ? '本周暂无训练安排' : `${completedOccurrences} 场已完成，保持节奏。`}</p>
+        <Progress label="本周进度" value={totalOccurrences ? completedOccurrences / totalOccurrences * 100 : 0} />
       </Card>
-      <StatePanel kind="empty" title="今天还没有训练安排" description="创建训练计划后，今天的训练会显示在这里。" />
+
+      <nav aria-label="本周日历" className="week-calendar">
+        {snapshot?.days.map((day) => (
+          <button
+            aria-current={day.localDate === selectedDate ? 'date' : undefined}
+            className={`week-calendar__day week-calendar__day--${day.status}`}
+            key={day.localDate}
+            onClick={() => selectDate(day.localDate)}
+          >
+            <span>{weekdayLabel(day.weekday)}</span>
+            <strong>{Number(day.localDate.slice(-2))}</strong>
+            <i aria-label={dayStatusLabel(day.status)} />
+          </button>
+        ))}
+      </nav>
+
+      {dashboard.status === 'loading' && !snapshot ? (
+        <StatePanel kind="loading" title="整理本周训练" description="正在从本地计划和会话派生日程。" />
+      ) : dashboard.status === 'error' && !snapshot ? (
+        <StatePanel kind="error" title="日程读取失败" description={dashboard.error?.message ?? '请稍后重试。'} />
+      ) : snapshot ? (
+        <>
+          {dashboard.status === 'error' ? <p className="dashboard-stale" role="status">本次日程更新失败，正在显示最近的本地数据。</p> : null}
+          <div className="dashboard-timeline">
+            {snapshot.days.map((day) => (
+              <DashboardDaySection
+                day={day}
+                isToday={day.localDate === range.today}
+                key={day.localDate}
+                sectionRef={(node) => { dayRefs.current[day.localDate] = node }}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {snapshot ? (
+        <RecentWorkoutCard
+          session={snapshot.recentWorkout}
+          weeklyCount={snapshot.statistics?.summary.weeklyWorkoutCount}
+          streakDays={snapshot.statistics?.summary.streakDays}
+        />
+      ) : null}
     </Page>
+  )
+}
+
+function DashboardDaySection({
+  day,
+  isToday,
+  sectionRef,
+}: {
+  day: DashboardDay
+  isToday: boolean
+  sectionRef: (node: HTMLElement | null) => void
+}) {
+  const completed = day.occurrences.filter((item) => item.status === 'completed').length
+  return (
+    <section className="dashboard-day" ref={sectionRef}>
+      <header className={isToday ? 'dashboard-day__header dashboard-day__header--today' : 'dashboard-day__header'}>
+        <strong>{isToday ? 'TODAY' : weekdayLabel(day.weekday)}</strong>
+        <span>{formatLocalDate(day.localDate)}</span>
+        <i />
+        <small>{day.occurrences.length ? `${completed}/${day.occurrences.length} · ${dayStatusLabel(day.status)}` : dayStatusLabel(day.status)}</small>
+      </header>
+      {day.occurrences.length ? (
+        <div className="dashboard-occurrences">
+          {day.occurrences.map((occurrence) => <DashboardWorkoutCard key={occurrence.key} occurrence={occurrence} />)}
+        </div>
+      ) : (
+        <div className="dashboard-rest"><span>REST DAY</span><small>好好恢复</small></div>
+      )}
+    </section>
+  )
+}
+
+function DashboardWorkoutCard({ occurrence }: { occurrence: DashboardOccurrence }) {
+  const progress = occurrence.totalExercises
+    ? occurrence.completedExercises / occurrence.totalExercises * 100
+    : 0
+  const category = categoryLabel(occurrence.category)
+  const status = occurrenceStatusLabel(occurrence.status)
+  const destination = occurrence.status === 'planned'
+    ? `/training/start?planId=${encodeURIComponent(occurrence.planId)}&localDate=${occurrence.localDate}`
+    : occurrence.status === 'completed'
+      ? `/history/${occurrence.sessionId}`
+      : `/training/${occurrence.sessionId}`
+
+  return (
+    <article className={`dashboard-workout dashboard-workout--${occurrence.status}`}>
+      <div className="dashboard-workout__time">{occurrence.localTime ?? '灵活'}</div>
+      <Card className="dashboard-workout__card">
+        <header>
+          <div><strong>{occurrence.planName}</strong><small>{category}</small></div>
+          <span>{status}</span>
+        </header>
+        {occurrence.totalExercises > 0 ? (
+          <Progress label={`${occurrence.completedExercises} / ${occurrence.totalExercises} 个动作`} value={progress} />
+        ) : null}
+        <div className="dashboard-workout__actions">
+          {occurrence.status === 'planned' ? <Link to={`/plans/${occurrence.planId}`}>编辑计划</Link> : <span />}
+          <Link className="ui-button ui-button--primary" to={destination}>
+            {occurrence.status === 'planned' ? '开始训练' : occurrence.status === 'in_progress' ? '继续训练' : '查看记录'}
+          </Link>
+        </div>
+      </Card>
+    </article>
+  )
+}
+
+function RecentWorkoutCard({
+  session,
+  weeklyCount,
+  streakDays,
+}: {
+  session: WorkoutSession | null
+  weeklyCount?: number
+  streakDays?: number
+}) {
+  if (!session) {
+    return <StatePanel kind="empty" title="暂无最近训练" description="完成第一场训练后，这里会显示训练摘要。" />
+  }
+  const sets = session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)
+  return (
+    <Card className="recent-workout">
+      <header><div><p>最近训练</p><h2>{session.planName}</h2></div><Link to={`/history/${session.id}`}>查看详情</Link></header>
+      <p>{formatDateTime(session.endedAt)}</p>
+      <div>
+        <span><strong>{sets}</strong><small>完成组数</small></span>
+        <span><strong>{workoutMinutes(session)}</strong><small>训练分钟</small></span>
+        <span><strong>{weeklyCount ?? '—'}</strong><small>本周场次</small></span>
+        <span><strong>{streakDays ?? '—'}</strong><small>连续天数</small></span>
+      </div>
+    </Card>
   )
 }
 
@@ -287,6 +485,70 @@ function formatWeek(localDate: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(value)
+}
+
+function isLocalDate(value: string | null): value is string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  return localDate(dateFromLocalDate(value)) === value
+}
+
+function localDate(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function dateFromLocalDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day, 12)
+}
+
+function weekdayLabel(weekday: DashboardDay['weekday']) {
+  return ['一', '二', '三', '四', '五', '六', '日'][weekday - 1]
+}
+
+function formatLocalDate(value: string) {
+  const [, month, day] = value.split('-')
+  return `${Number(month)}月${Number(day)}日`
+}
+
+function dayStatusLabel(status: DashboardDayStatus) {
+  return {
+    rest: '休息',
+    planned: '计划中',
+    in_progress: '进行中',
+    partially_completed: '部分完成',
+    completed: '已完成',
+  }[status]
+}
+
+function occurrenceStatusLabel(status: DashboardOccurrence['status']) {
+  return {
+    planned: '计划中',
+    in_progress: '进行中',
+    completed: '已完成',
+  }[status]
+}
+
+function categoryLabel(category: DashboardOccurrence['category']) {
+  if (!category) return '训练'
+  return {
+    strength: '力量训练',
+    cardio: '有氧训练',
+    mobility: '拉伸放松',
+  }[category]
+}
+
+function workoutMinutes(session: WorkoutSession) {
+  if (!session.startedAt || !session.endedAt) return '—'
+  return Math.max(
+    1,
+    Math.round(
+      (new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime()) /
+        60_000,
+    ),
+  )
 }
 
 function formatSet(set: import('../domain').WorkoutSetResult) {

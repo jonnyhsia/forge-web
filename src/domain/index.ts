@@ -1,4 +1,5 @@
 export * from './entities'
+export * from './dashboard'
 export * from './factories'
 export * from './sync'
 export * from './statistics'

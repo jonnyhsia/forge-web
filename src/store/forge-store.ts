@@ -15,6 +15,8 @@ import {
 } from '../data'
 import type {
   AppSettings,
+  DashboardRange,
+  DashboardSnapshot,
   EntityId,
   StatisticsCache,
   StatisticsRange,
@@ -68,6 +70,7 @@ export interface ForgeState {
   initializationError: DataError | null
   online: boolean
   pendingSyncCount: number
+  dashboard: ResourceSlice<DashboardSnapshot | null>
   plans: PlansSlice
   planDetails: Record<EntityId, ResourceSlice<PlanAggregate | null>>
   history: PageSlice<WorkoutSession>
@@ -77,6 +80,7 @@ export interface ForgeState {
   settings: ResourceSlice<AppSettings | null>
   initialize: () => Promise<void>
   setOnline: (online: boolean) => void
+  loadDashboard: (range: DashboardRange) => Promise<void>
   loadPlans: (options?: LoadPlansOptions) => Promise<void>
   loadPlan: (planId: EntityId) => Promise<void>
   savePlan: (input: PlanAggregate) => Promise<void>
@@ -139,6 +143,7 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     initializationError: null,
     online: typeof navigator === 'undefined' ? true : navigator.onLine,
     pendingSyncCount: 0,
+    dashboard: emptyResource(null),
     plans: emptyPlans(),
     planDetails: {},
     history: emptyPage(),
@@ -155,13 +160,13 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
         initialization = dependencies
           .initialize()
           .then(async () => {
-            const [, , , , , pendingSyncCount] = await Promise.all([
+            const pendingSyncCount = await dependencies.countPendingSync()
+            await Promise.all([
               get().loadPlans({ reset: true }),
               get().loadWorkout(),
               get().loadHistory({ reset: true }),
               get().loadStatistics(),
               get().loadSettings(),
-              dependencies.countPendingSync(),
             ])
             set({ initialized: true, initializing: false, pendingSyncCount })
           })
@@ -178,6 +183,33 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     },
 
     setOnline: (online) => set({ online }),
+
+    loadDashboard: async (range) => {
+      const previous = get().dashboard
+      const sameRange =
+        previous.value?.range.start === range.start &&
+        previous.value.range.end === range.end
+      set({
+        dashboard: {
+          value: sameRange ? previous.value : null,
+          status: 'loading',
+          error: null,
+        },
+      })
+
+      try {
+        const value = await dependencies.data.dashboard.load(range)
+        set({ dashboard: { value, status: 'ready', error: null } })
+      } catch (error) {
+        set({
+          dashboard: {
+            value: sameRange ? previous.value : null,
+            status: 'error',
+            error: toDataError(error),
+          },
+        })
+      }
+    },
 
     loadPlans: async (options = {}) => {
       const previous = get().plans

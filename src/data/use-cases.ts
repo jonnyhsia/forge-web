@@ -11,8 +11,11 @@ import {
   type WorkoutTransitionCommand,
   type CompleteWorkoutSetCommand,
   type CompleteWorkoutSetOutcome,
+  type DashboardRange,
+  type DashboardSnapshot,
   type WorkoutTimerState,
   calculateStatistics,
+  deriveDashboardSchedule,
 } from '../domain'
 import { DEFAULT_APP_SETTINGS, type ForgeDatabase } from './database'
 import { DataError, toDataError } from './errors'
@@ -88,6 +91,10 @@ export interface StatisticsUseCases {
     range: StatisticsRange,
     generatedAt?: string,
   ): Promise<StatisticsCache>
+}
+
+export interface DashboardUseCases {
+  load(range: DashboardRange): Promise<DashboardSnapshot>
 }
 
 class LocalPlansUseCases implements PlansUseCases {
@@ -412,6 +419,63 @@ class LocalStatisticsUseCases implements StatisticsUseCases {
   }
 }
 
+class LocalDashboardUseCases implements DashboardUseCases {
+  private readonly database: ForgeDatabase
+
+  constructor(database: ForgeDatabase) {
+    this.database = database
+  }
+
+  async load(range: DashboardRange): Promise<DashboardSnapshot> {
+    try {
+      const [plans, sessions, recentWorkout, statistics] = await Promise.all([
+        this.database.trainingPlans
+          .where('status')
+          .equals('active')
+          .filter((plan) => !plan.deletedAt)
+          .toArray(),
+        this.database.workoutSessions
+          .filter((session) => {
+            const localDate = session.scheduleOccurrenceKey.slice(-10)
+            return (
+              !session.deletedAt &&
+              localDate >= range.start &&
+              localDate <= range.end
+            )
+          })
+          .toArray(),
+        this.database.workoutSessions
+          .orderBy('endedAt')
+          .reverse()
+          .filter(
+            (session) =>
+              !session.deletedAt &&
+              session.status === 'completed' &&
+              Boolean(session.endedAt),
+          )
+          .first(),
+        this.database.statisticsCaches
+          .orderBy('generatedAt')
+          .reverse()
+          .filter(
+            (cache) =>
+              cache.scope === 'cached' && isCurrentStatisticsCache(cache),
+          )
+          .first(),
+      ])
+
+      return {
+        range,
+        days: deriveDashboardSchedule({ range, plans, sessions }),
+        recentWorkout: recentWorkout ?? null,
+        statistics: statistics ?? null,
+      }
+    } catch (error) {
+      throw toDataError(error)
+    }
+  }
+}
+
 function isCurrentStatisticsCache(cache: StatisticsCache): boolean {
   const summary = cache.summary as Partial<StatisticsCache['summary']> | undefined
   return Boolean(
@@ -427,6 +491,7 @@ function isCurrentStatisticsCache(cache: StatisticsCache): boolean {
 }
 
 export interface ForgeDataUseCases {
+  dashboard: DashboardUseCases
   plans: PlansUseCases
   workouts: WorkoutsUseCases
   history: HistoryUseCases
@@ -447,6 +512,7 @@ export function createForgeDataUseCases(
   )
 
   return {
+    dashboard: new LocalDashboardUseCases(database),
     plans: new LocalPlansUseCases(
       database,
       new DexiePlansRepository(database),
