@@ -101,6 +101,33 @@ describe('feature store', () => {
     }
   })
 
+  it('loads a plan aggregate into an independent detail resource', async () => {
+    const database = new ForgeDatabase('forge-t032-plan-detail-store')
+    const store = createForgeStore({
+      initialize: () => database.open().then(() => undefined),
+      data: createForgeDataUseCases(database),
+      countPendingSync: () => database.syncQueue.count(),
+    })
+
+    try {
+      await database.trainingPlans.put(plan('plan-a', timestamp))
+
+      await store.getState().loadPlan('plan-a')
+
+      expect(store.getState().planDetails['plan-a']).toEqual({
+        value: {
+          plan: expect.objectContaining({ id: 'plan-a' }),
+          exercises: [],
+        },
+        status: 'ready',
+        error: null,
+      })
+      expect(store.getState().plans.status).toBe('idle')
+    } finally {
+      database.close()
+    }
+  })
+
   it('retains the plan filter while loading subsequent pages', async () => {
     const database = new ForgeDatabase('forge-t03-plans-filter-store')
     const store = createForgeStore({

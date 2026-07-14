@@ -62,6 +62,7 @@ export interface ForgeState {
   online: boolean
   pendingSyncCount: number
   plans: PlansSlice
+  planDetails: Record<EntityId, ResourceSlice<PlanAggregate | null>>
   history: PageSlice<WorkoutSession>
   workouts: ResourceSlice<WorkoutSession | null>
   statistics: ResourceSlice<StatisticsCache[]>
@@ -69,6 +70,7 @@ export interface ForgeState {
   initialize: () => Promise<void>
   setOnline: (online: boolean) => void
   loadPlans: (options?: LoadPlansOptions) => Promise<void>
+  loadPlan: (planId: EntityId) => Promise<void>
   savePlan: (input: PlanAggregate) => Promise<void>
   archivePlan: (planId: EntityId) => Promise<void>
   deletePlan: (planId: EntityId) => Promise<void>
@@ -116,6 +118,7 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
     online: typeof navigator === 'undefined' ? true : navigator.onLine,
     pendingSyncCount: 0,
     plans: emptyPlans(),
+    planDetails: {},
     history: emptyPage(),
     workouts: emptyResource(null),
     statistics: emptyResource([]),
@@ -193,6 +196,37 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
             ...previous,
             status: 'error',
             error: toDataError(error),
+          },
+        })
+      }
+    },
+
+    loadPlan: async (planId) => {
+      const previous = get().planDetails[planId] ?? emptyResource(null)
+      set({
+        planDetails: {
+          ...get().planDetails,
+          [planId]: { ...previous, status: 'loading', error: null },
+        },
+      })
+
+      try {
+        const value = await dependencies.data.plans.get(planId)
+        set({
+          planDetails: {
+            ...get().planDetails,
+            [planId]: { value, status: 'ready', error: null },
+          },
+        })
+      } catch (error) {
+        set({
+          planDetails: {
+            ...get().planDetails,
+            [planId]: {
+              ...previous,
+              status: 'error',
+              error: toDataError(error),
+            },
           },
         })
       }
