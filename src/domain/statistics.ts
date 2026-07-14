@@ -66,6 +66,8 @@ function calculatePersonalRecords(
         if (
           set.skipped ||
           !('repetitions' in set) ||
+          typeof set.repetitions !== 'number' ||
+          !set.weight ||
           set.weight.value === undefined
         ) {
           continue
@@ -106,6 +108,8 @@ function calculateTrainingVolume(history: WorkoutSession[]): number {
             if (
               set.skipped ||
               !('repetitions' in set) ||
+              typeof set.repetitions !== 'number' ||
+              !set.weight ||
               set.weight.value === undefined
             ) {
               return setTotal
