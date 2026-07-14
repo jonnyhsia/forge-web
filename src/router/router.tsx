@@ -6,6 +6,10 @@ import {
   PlansPage,
 } from '../features/plans/PlanPages'
 import {
+  TrainingSessionPage,
+  TrainingStartPage,
+} from '../features/training/TrainingPages'
+import {
   DashboardPage,
   HistoryDetailPage,
   HistoryPage,
@@ -13,8 +17,6 @@ import {
   RouteErrorPage,
   SettingsPage,
   StatisticsPage,
-  TrainingSessionPage,
-  TrainingStartPage,
 } from '../pages/ShellPages'
 import { ROUTE_PATHS } from './route-paths'
 

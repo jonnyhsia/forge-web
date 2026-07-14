@@ -79,7 +79,7 @@ export interface ForgeState {
   archivePlan: (planId: EntityId) => Promise<void>
   deletePlan: (planId: EntityId) => Promise<void>
   loadHistory: (options?: LoadPageOptions) => Promise<void>
-  loadWorkout: () => Promise<void>
+  loadWorkout: (sessionId?: EntityId) => Promise<void>
   startWorkout: (input: StartWorkoutInput) => Promise<WorkoutSession>
   transitionWorkout: (
     sessionId: EntityId,
@@ -355,13 +355,15 @@ export function createForgeStore(dependencies: ForgeStoreDependencies) {
       }
     },
 
-    loadWorkout: async () => {
+    loadWorkout: async (sessionId) => {
       set({
         workouts: { ...get().workouts, status: 'loading', error: null },
       })
 
       try {
-        const value = await dependencies.data.workouts.getActive()
+        const value = sessionId
+          ? await dependencies.data.workouts.get(sessionId)
+          : await dependencies.data.workouts.getActive()
         set({ workouts: { value, status: 'ready', error: null } })
       } catch (error) {
         set({

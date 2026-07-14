@@ -77,15 +77,6 @@ export function SettingsPage() {
   )
 }
 
-export function TrainingStartPage() {
-  return <TrainingShell title="准备训练" description="选择计划并创建训练会话后，将进入全屏训练执行。" />
-}
-
-export function TrainingSessionPage() {
-  const { sessionId } = useParams()
-  return <TrainingShell title="训练进行中" description={`会话 ${sessionId ?? ''} 的状态机将在 T06 接入。`} />
-}
-
 export function NotFoundPage() {
   return (
     <div className="focused-page">
@@ -107,18 +98,6 @@ function FocusedPlaceholder({ backTo, eyebrow, title, description }: { backTo: s
     <div className="focused-page">
       <BackHeader label={eyebrow} title={title} to={backTo} />
       <StatePanel description={description} kind="empty" title="页面壳已就绪" />
-    </div>
-  )
-}
-
-function TrainingShell({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="training-shell">
-      <BackHeader label="退出训练" title={title} to="/" />
-      <div className="training-shell__stage">
-        <span className="training-shell__ring"><span>0%</span></span>
-        <StatePanel description={description} kind="empty" title="训练壳已就绪" />
-      </div>
     </div>
   )
 }
