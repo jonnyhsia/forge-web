@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Card, Progress, StatePanel } from '../ui/primitives'
+import { Button, Card, Dialog, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
 import {
@@ -47,14 +47,17 @@ function BackHeader({ to, label, title }: { to: string; label: string; title: st
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const dashboard = useForgeStore((state) => state.dashboard)
   const online = useForgeStore((state) => state.online)
   const pendingSyncCount = useForgeStore((state) => state.pendingSyncCount)
+  const syncMode = useForgeStore((state) => state.syncMode)
   const loadDashboard = useForgeStore((state) => state.loadDashboard)
   const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
   const settings = useForgeStore((state) => state.settings.value)
   const [reminderMessage, setReminderMessage] = useState<string | null>(null)
+  const [showSyncDetails, setShowSyncDetails] = useState(false)
   const requestedDate = searchParams.get('date')
   const focusDate = isLocalDate(requestedDate) ? requestedDate : localDate()
   const range = dashboardWeekRange(dateFromLocalDate(focusDate))
@@ -110,16 +113,31 @@ export function DashboardPage() {
     0,
   ) ?? 0
 
+  const openSyncDetails = () => setShowSyncDetails(true)
+  const viewSyncDetails = () => {
+    setShowSyncDetails(false)
+    void navigate('/settings')
+  }
+
   return (
-    <Page
-      action={pendingSyncCount > 0 ? <span className="dashboard-sync-count">{pendingSyncCount} 项待同步</span> : null}
-      eyebrow="LOCAL TRAINING"
-      title="FORGE"
-    >
+    <>
+      <Page
+        action={pendingSyncCount > 0 ? (
+          <button className="dashboard-sync-count" onClick={openSyncDetails} type="button">
+            {pendingSyncCount} 项待同步
+          </button>
+        ) : null}
+        eyebrow="LOCAL TRAINING"
+        title="FORGE"
+      >
       {!online || pendingSyncCount > 0 ? (
         <div className="dashboard-connectivity" role="status">
           {!online ? <span><Icon name="cloud-off" size={15} />离线模式，本地训练仍可使用</span> : null}
-          {pendingSyncCount > 0 ? <span>{pendingSyncCount} 项更改等待同步</span> : null}
+          {pendingSyncCount > 0 ? (
+            <button onClick={openSyncDetails} type="button">
+              {pendingSyncCount} 项更改等待同步
+            </button>
+          ) : null}
         </div>
       ) : null}
       {reminderMessage ? (
@@ -178,7 +196,31 @@ export function DashboardPage() {
           streakDays={snapshot.statistics?.summary.streakDays}
         />
       ) : null}
-    </Page>
+      </Page>
+
+      <Dialog
+        actions={(
+          <>
+            <Button onClick={() => setShowSyncDetails(false)} variant="ghost">知道了</Button>
+            <Button onClick={viewSyncDetails}>查看同步详情</Button>
+          </>
+        )}
+        onClose={() => setShowSyncDetails(false)}
+        open={showSyncDetails}
+        title="待同步更改"
+      >
+        <div className="dashboard-sync-dialog">
+          <p>{pendingSyncCount} 项更改已安全保存在本机。</p>
+          <p>
+            {syncMode === 'local'
+              ? '当前尚未配置同步服务，因此这些更改不会自动上传。'
+              : !online
+                ? '恢复网络连接后，系统会自动尝试同步。'
+                : '系统会自动尝试同步；你也可以在同步详情中查看处理状态。'}
+          </p>
+        </div>
+      </Dialog>
+    </>
   )
 }
 

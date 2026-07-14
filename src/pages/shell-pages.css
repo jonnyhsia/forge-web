@@ -1,10 +1,11 @@
-.page, .focused-page { min-height: 100%; }
-.page { display: flex; flex-direction: column; padding: max(var(--space-5), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) var(--space-6) max(var(--space-5), env(safe-area-inset-left)); }
-.page-header { min-height: 3.5rem; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.page, .focused-page { height: 100%; min-height: 0; }
+.page { display: flex; flex-direction: column; overflow: hidden; padding: max(var(--space-5), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) var(--space-6) max(var(--space-5), env(safe-area-inset-left)); }
+.page-header { min-height: 3.5rem; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .page-header h1 { margin: 0; color: var(--color-text); font-size: var(--text-xl); }
 .page-header .page-eyebrow { margin: 0 0 var(--space-1); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; }
 .page-header:has(.page-eyebrow) h1 { color: var(--color-accent); font-family: var(--font-display); font-size: 2rem; letter-spacing: .14em; }
-.page-body { flex: 1; display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-5); }
+.page-body { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: var(--space-4); overflow-y: auto; overscroll-behavior: contain; padding-top: var(--space-5); scrollbar-gutter: stable; }
+.page-body > * { flex-shrink: 0; }
 .round-action, .back-link { width: var(--touch-target); height: var(--touch-target); display: grid; place-items: center; border-radius: var(--radius-round); text-decoration: none; }
 .round-action { background: var(--color-accent); color: var(--color-on-accent); }
 .back-link { flex: 0 0 auto; border: 1px solid var(--color-border); background: var(--color-surface); }
@@ -13,7 +14,7 @@
 .hero-card__label { margin: 0; color: var(--color-accent); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; }
 .hero-card h2 { margin: var(--space-2) 0; font-family: var(--font-display); font-size: 2rem; }
 .hero-card > p:not(.hero-card__label) { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--text-sm); }
-.focused-page { display: flex; flex-direction: column; padding: max(var(--space-4), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-5), env(safe-area-inset-left)); }
+.focused-page { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: max(var(--space-4), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-5), env(safe-area-inset-left)); }
 .focused-header { min-height: 3.5rem; display: flex; align-items: center; gap: var(--space-3); }
 .focused-header p { margin: 0; color: var(--color-text-muted); font-family: var(--font-mono); font-size: .625rem; letter-spacing: .08em; }
 .focused-header h1 { margin: var(--space-1) 0 0; font-size: var(--text-md); }
