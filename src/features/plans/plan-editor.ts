@@ -128,7 +128,7 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
         targetSets: 3,
         targetRepetitions: 10,
         targetSeconds: 60,
-        weightMode: 'external',
+        weightMode: 'bodyweight',
         weightValue: null,
         weightUnit: options.defaultWeightUnit,
         restSeconds: 90,

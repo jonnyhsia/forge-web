@@ -8,7 +8,7 @@ import {
 } from 'react-router-dom'
 import type { PlanAggregate } from '../../data'
 import type { DataError } from '../../data'
-import type { PlanStatus, Weekday } from '../../domain'
+import type { Weekday } from '../../domain'
 import { useForgeStore } from '../../store'
 import { Button, Card, Dialog, Field, StatePanel } from '../../ui/primitives'
 import { Icon } from '../../ui/Icon'
@@ -191,8 +191,8 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     if (editor.isDirty(draft) && !allowNavigation.current) event.preventDefault()
   }, [draft, editor]))
 
-  const persist = async (status: PlanStatus) => {
-    const result = editor.validate(draft, status)
+  const persist = async () => {
+    const result = editor.validate(draft, 'active')
     setValidation(result)
     if (!result.valid) {
       setSubmitError('请先修正表单错误后再保存。')
@@ -201,7 +201,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     setSubmitting(true)
     setSubmitError('')
     try {
-      await savePlan(editor.toAggregate(draft, status))
+      await savePlan(editor.toAggregate(draft, 'active'))
       return true
     } catch (error) {
       setSubmitError(dataErrorMessage(error as DataError))
@@ -211,18 +211,11 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     }
   }
 
-  const saveAndStay = async (status: PlanStatus) => {
-    if (!(await persist(status))) return
+  const saveAndStay = async () => {
+    if (!(await persist())) return
     if (!aggregate) {
       allowNavigation.current = true
       navigate(`/plans/${draft.id}`, { replace: true })
-    }
-  }
-
-  const saveDraftAndLeave = async () => {
-    if (await persist('draft')) {
-      allowNavigation.current = true
-      blocker.proceed?.()
     }
   }
 
@@ -286,7 +279,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
           <label className="plan-textarea-label">计划描述（可选）<textarea maxLength={240} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
           <div className="plan-grid">
             <label>训练类别<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as PlanDraft['category'] })}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-            <label>训练时间（可选）<input type="time" value={draft.localTime} onChange={(event) => setDraft({ ...draft, localTime: event.target.value })} /></label>
+            <label>计划开始时间（可选）<input type="time" value={draft.localTime} onChange={(event) => setDraft({ ...draft, localTime: event.target.value })} /></label>
           </div>
         </section>
 
@@ -317,13 +310,12 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
       </div>
 
       <footer className="plan-editor-actions">
-        <Button disabled={submitting} variant="secondary" onClick={() => void saveAndStay('draft')}>保存草稿</Button>
-        <Button disabled={submitting} onClick={() => void saveAndStay('active')}>{submitting ? '保存中…' : '保存计划'}</Button>
+        <Button disabled={submitting} fullWidth onClick={() => void saveAndStay()}>{submitting ? '保存中…' : '保存计划'}</Button>
       </footer>
 
       {editingExercise ? <ExerciseDialog exercise={editingExercise} onClose={() => setEditingExercise(null)} onDelete={() => removeExercise(editingExercise.id)} onSave={saveExercise} /> : null}
       <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => setDeleteOpen(false)}>取消</Button><Button fullWidth variant="danger" disabled={submitting} onClick={() => void confirmDelete()}>确认删除</Button></>} onClose={() => setDeleteOpen(false)} open={deleteOpen} title="删除训练计划"><p>删除后计划将从列表隐藏，并在联网后同步删除。此操作无法撤销。</p></Dialog>
-      <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => blocker.reset?.()}>继续编辑</Button><Button fullWidth variant="ghost" onClick={() => { allowNavigation.current = true; blocker.proceed?.() }}>丢弃修改</Button><Button fullWidth onClick={() => void saveDraftAndLeave()}>保存草稿</Button></>} onClose={() => blocker.reset?.()} open={blocker.state === 'blocked' && !editingExercise && !deleteOpen} title="保存未提交的修改？"><p>{submitError || '你可以保存为草稿、丢弃修改，或继续编辑。'}</p></Dialog>
+      <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => blocker.reset?.()}>继续编辑</Button><Button fullWidth variant="ghost" onClick={() => { allowNavigation.current = true; blocker.proceed?.() }}>丢弃修改</Button></>} onClose={() => blocker.reset?.()} open={blocker.state === 'blocked' && !editingExercise && !deleteOpen} title="放弃未提交的修改？"><p>{submitError || '离开页面将丢弃未保存的修改。'}</p></Dialog>
     </div>
   )
 }
@@ -350,7 +342,7 @@ function ExerciseDialog({ exercise, onSave, onDelete, onClose }: { exercise: Pla
         {draft.type === 'repetitions' ? <>
           <Field error={errors.targetRepetitions} label="每组次数" min={1} max={999} type="number" value={draft.targetRepetitions} onChange={(event) => setDraft({ ...draft, targetRepetitions: Number(event.target.value) })} />
           <label>重量模式<select value={draft.weightMode} onChange={(event) => setDraft({ ...draft, weightMode: event.target.value as PlanExerciseDraft['weightMode'], weightValue: null })}><option value="external">外加重量</option><option value="bodyweight">自重</option></select></label>
-          <div className="plan-grid"><Field error={errors.weightValue} label={draft.weightMode === 'external' ? '目标重量' : '附加重量（可选）'} min="0" step="0.001" type="number" value={draft.weightValue ?? ''} onChange={(event) => setDraft({ ...draft, weightValue: event.target.value === '' ? null : Number(event.target.value) })} /><label>单位<select value={draft.weightUnit} onChange={(event) => setDraft({ ...draft, weightUnit: event.target.value as 'kg' | 'lb' })}><option value="kg">kg</option><option value="lb">lb</option></select></label></div>
+          {draft.weightMode === 'external' ? <div className="plan-grid"><Field error={errors.weightValue} label="目标重量" min="0" step="0.001" type="number" value={draft.weightValue ?? ''} onChange={(event) => setDraft({ ...draft, weightValue: event.target.value === '' ? null : Number(event.target.value) })} /><label>单位<select value={draft.weightUnit} onChange={(event) => setDraft({ ...draft, weightUnit: event.target.value as 'kg' | 'lb' })}><option value="kg">kg</option><option value="lb">lb</option></select></label></div> : null}
         </> : <Field error={errors.targetSeconds} label="每组时长（秒）" min={1} max={86400} step={30} type="number" value={draft.targetSeconds} onChange={(event) => setDraft({ ...draft, targetSeconds: Number(event.target.value) })} />}
         <Field error={errors.restSeconds} label="组间休息（秒）" min={0} max={3600} step={30} type="number" value={draft.restSeconds} onChange={(event) => setDraft({ ...draft, restSeconds: Number(event.target.value) })} />
       </div>
