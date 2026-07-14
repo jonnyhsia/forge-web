@@ -20,7 +20,11 @@ function errorMessage(error: unknown): string {
 }
 
 export class SyncEngine {
-  constructor(private readonly transport: SyncTransport) {}
+  private readonly transport: SyncTransport
+
+  constructor(transport: SyncTransport) {
+    this.transport = transport
+  }
 
   async processReady(): Promise<void> {
     const items = await syncQueueRepository.listReady()

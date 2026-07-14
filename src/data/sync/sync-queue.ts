@@ -1,4 +1,4 @@
-import { forgeDatabase } from '../database'
+import { forgeDatabase, type ForgeDatabase } from '../database'
 import { createEntityId, nowIso } from '../../domain/factories'
 import type {
   SyncEntityType,
@@ -40,14 +40,20 @@ export function createSyncQueueItem(input: EnqueueSyncInput): SyncQueueItem {
 }
 
 export class SyncQueueRepository {
+  private readonly database: ForgeDatabase
+
+  constructor(database: ForgeDatabase = forgeDatabase) {
+    this.database = database
+  }
+
   async putLatest(item: SyncQueueItem): Promise<void> {
-    const existing = await forgeDatabase.syncQueue
+    const existing = await this.database.syncQueue
       .where('dedupeKey')
       .equals(item.dedupeKey)
       .first()
 
     if (existing) {
-      await forgeDatabase.syncQueue.put({
+      await this.database.syncQueue.put({
         ...item,
         id: existing.id,
         createdAt: existing.createdAt,
@@ -55,18 +61,18 @@ export class SyncQueueRepository {
       return
     }
 
-    await forgeDatabase.syncQueue.put(item)
+    await this.database.syncQueue.put(item)
   }
 
   countPending(): Promise<number> {
-    return forgeDatabase.syncQueue
+    return this.database.syncQueue
       .where('status')
       .anyOf(['pending', 'processing', 'failed', 'conflict'])
       .count()
   }
 
   async listReady(at = nowIso()): Promise<SyncQueueItem[]> {
-    const pending = await forgeDatabase.syncQueue
+    const pending = await this.database.syncQueue
       .where('status')
       .anyOf(['pending', 'failed'])
       .toArray()
@@ -81,11 +87,11 @@ export class SyncQueueRepository {
   }
 
   remove(id: string): Promise<void> {
-    return forgeDatabase.syncQueue.delete(id)
+    return this.database.syncQueue.delete(id)
   }
 
   put(item: SyncQueueItem): Promise<string> {
-    return forgeDatabase.syncQueue.put(item)
+    return this.database.syncQueue.put(item)
   }
 }
 

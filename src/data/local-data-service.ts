@@ -13,8 +13,12 @@ import {
   SYNC_PRIORITY,
   type SyncEntityType,
 } from '../domain/sync'
-import { forgeDatabase } from './database'
-import { createSyncQueueItem, syncQueueRepository } from './sync/sync-queue'
+import { forgeDatabase, type ForgeDatabase } from './database'
+import {
+  createSyncQueueItem,
+  SyncQueueRepository,
+  syncQueueRepository,
+} from './sync/sync-queue'
 
 function pendingEntity<TEntity extends BaseEntity>(entity: TEntity): TEntity {
   return {
@@ -29,13 +33,24 @@ function pendingEntity<TEntity extends BaseEntity>(entity: TEntity): TEntity {
 }
 
 export class LocalDataService {
+  private readonly database: ForgeDatabase
+  private readonly queueRepository: SyncQueueRepository
+
+  constructor(
+    database: ForgeDatabase = forgeDatabase,
+    queueRepository: SyncQueueRepository = syncQueueRepository,
+  ) {
+    this.database = database
+    this.queueRepository = queueRepository
+  }
+
   initialize(): Promise<void> {
-    return forgeDatabase.open().then(() => undefined)
+    return this.database.open().then(() => undefined)
   }
 
   saveExercise(exercise: Exercise): Promise<Exercise> {
     return this.saveEntity(
-      forgeDatabase.exercises,
+      this.database.exercises,
       pendingEntity(exercise),
       'exercise',
       SYNC_PRIORITY.exercise,
@@ -58,21 +73,21 @@ export class LocalDataService {
       priority: SYNC_PRIORITY.trainingPlan,
     })
 
-    await forgeDatabase.transaction(
+    await this.database.transaction(
       'rw',
       [
-        forgeDatabase.trainingPlans,
-        forgeDatabase.planExercises,
-        forgeDatabase.syncQueue,
+        this.database.trainingPlans,
+        this.database.planExercises,
+        this.database.syncQueue,
       ],
       async () => {
-        await forgeDatabase.trainingPlans.put(pendingPlan)
-        await forgeDatabase.planExercises
+        await this.database.trainingPlans.put(pendingPlan)
+        await this.database.planExercises
           .where('planId')
           .equals(plan.id)
           .delete()
-        await forgeDatabase.planExercises.bulkPut(pendingExercises)
-        await syncQueueRepository.putLatest(queueItem)
+        await this.database.planExercises.bulkPut(pendingExercises)
+        await this.queueRepository.putLatest(queueItem)
       },
     )
 
@@ -81,7 +96,7 @@ export class LocalDataService {
 
   saveWorkoutSession(session: WorkoutSession): Promise<WorkoutSession> {
     return this.saveEntity(
-      forgeDatabase.workoutSessions,
+      this.database.workoutSessions,
       pendingEntity(session),
       'workout-session',
       SYNC_PRIORITY.workoutSession,
@@ -90,11 +105,11 @@ export class LocalDataService {
   }
 
   async saveStatisticsCache(cache: StatisticsCache): Promise<void> {
-    await forgeDatabase.statisticsCaches.put(cache)
+    await this.database.statisticsCaches.put(cache)
   }
 
   async saveSettings(settings: AppSettings): Promise<void> {
-    await forgeDatabase.settings.put(settings)
+    await this.database.settings.put(settings)
   }
 
   private async saveEntity<TEntity extends BaseEntity>(
@@ -113,12 +128,12 @@ export class LocalDataService {
       idempotencyKey,
     })
 
-    await forgeDatabase.transaction(
+    await this.database.transaction(
       'rw',
-      [table, forgeDatabase.syncQueue],
+      [table, this.database.syncQueue],
       async () => {
         await table.put(entity)
-        await syncQueueRepository.putLatest(queueItem)
+        await this.queueRepository.putLatest(queueItem)
       },
     )
 
