@@ -73,3 +73,12 @@ export default defineConfig([
 ])
 
 ```
+
+## Deployment
+
+Pushes to `main` are automatically deployed to
+`https://jonnyhsia.github.io/forge-web/` by the GitHub Pages workflow. The
+workflow can also be started manually from the Actions tab.
+
+Before the first deployment, select **GitHub Actions** under
+**Settings → Pages → Build and deployment → Source** in the GitHub repository.
