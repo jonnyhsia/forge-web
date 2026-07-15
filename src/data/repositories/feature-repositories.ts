@@ -46,7 +46,7 @@ export class DexiePlansRepository implements PlansRepository {
   ): Promise<Page<TrainingPlan>> {
     const limit = pageLimit(request.limit)
     const filter = request.filter
-    const statuses = filter?.statuses ?? ['draft', 'active']
+    const statuses = filter?.statuses ?? ['active']
     const cursor = request.cursor ? decodeCursor(request.cursor) : undefined
 
     const collection = this.database.trainingPlans

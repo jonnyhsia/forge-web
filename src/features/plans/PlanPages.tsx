@@ -107,7 +107,7 @@ export function PlansPage() {
               <Card className="plan-card" key={plan.id}>
                 <button aria-expanded={open} className="plan-card__summary" onClick={() => togglePlan(plan.id)}>
                   <span><strong>{plan.name}</strong><small>{CATEGORY_LABELS[plan.category]} · {plan.weekdays.length} 个训练日</small></span>
-                  <span className="plan-card__meta"><em>{plan.status === 'draft' ? '草稿' : syncLabel(plan.sync.status)}</em><Icon className={open ? 'plan-card__chevron plan-card__chevron--open' : 'plan-card__chevron'} name="chevron-right" size={17} /></span>
+                  <span className="plan-card__meta"><em>{syncLabel(plan.sync.status)}</em><Icon className={open ? 'plan-card__chevron plan-card__chevron--open' : 'plan-card__chevron'} name="chevron-right" size={17} /></span>
                 </button>
                 {open ? (
                   <div className="plan-card__detail">
@@ -212,7 +212,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   }, [draft, editor]))
 
   const persist = async () => {
-    const result = editor.validate(draft, 'active')
+    const result = editor.validate(draft)
     setValidation(result)
     if (!result.valid) {
       setSubmitError('请先修正表单错误后再保存。')
@@ -221,7 +221,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     setSubmitting(true)
     setSubmitError('')
     try {
-      await savePlan(editor.toAggregate(draft, 'active'))
+      await savePlan(editor.toAggregate(draft))
       return true
     } catch (error) {
       setSubmitError(dataErrorMessage(error as DataError))
@@ -263,7 +263,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   const endWeekdayGesture = () => { weekdayGesture.current = null }
 
   const saveExercise = (exercise: PlanExerciseDraft) => {
-    const result = editor.validate({ ...draft, name: 'Valid', weekdays: [1], exercises: [exercise] }, 'active')
+    const result = editor.validate({ ...draft, name: 'Valid', weekdays: [1], exercises: [exercise] })
     if (result.exercises[exercise.id]) return result.exercises[exercise.id]
     setDraft((current) => ({
       ...current,
@@ -318,7 +318,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
       <header className="plan-editor-header">
         <Link aria-label="返回计划" className="back-link" to="/plans"><Icon name="arrow-left" size={18} /></Link>
         <div><p>{aggregate ? '编辑计划' : '新建计划'}</p><h1>{draft.name.trim() || '未命名计划'}</h1></div>
-        {aggregate ? <span className="plan-status-badge">{aggregate.plan.status === 'draft' ? '草稿' : syncLabel(aggregate.plan.sync.status)}</span> : null}
+        {aggregate ? <span className="plan-status-badge">{syncLabel(aggregate.plan.sync.status)}</span> : null}
       </header>
 
       <div className="plan-editor-body top-fading-edge">
@@ -422,7 +422,7 @@ function ExerciseDialog({ exercise, open, onSave, onDelete, onClose, onAfterClos
   const weightValue = draft.weightValue ?? 0
   const updateWeight = (value: number) => setDraft({
     ...draft,
-    weightMode: value === 0 ? 'bodyweight' : draft.weightMode,
+    weightMode: value === 0 ? 'bodyweight' : 'external',
     weightValue: value === 0 ? null : value,
   })
   return (

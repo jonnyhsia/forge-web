@@ -36,7 +36,7 @@ export interface Exercise extends BaseEntity {
 }
 
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
-export type PlanStatus = 'draft' | 'active' | 'archived'
+export type PlanStatus = 'active' | 'archived'
 export type PlanCategory = 'strength' | 'cardio' | 'mobility'
 export const DEFAULT_PLAN_CATEGORY: PlanCategory = 'strength'
 

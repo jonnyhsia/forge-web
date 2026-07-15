@@ -1,7 +1,7 @@
 export type IsoDateTime = string
 export type WeightUnit = 'kg' | 'lb'
 export type PlanCategory = 'strength' | 'cardio' | 'mobility'
-export type PlanStatus = 'draft' | 'active' | 'archived'
+export type PlanStatus = 'active' | 'archived'
 export type SyncStatus =
   | 'local'
   | 'pending'

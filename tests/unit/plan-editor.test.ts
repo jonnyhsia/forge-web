@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createPlanEditor } from '../../src/features/plans/plan-editor'
 
 describe('计划编辑模块', () => {
-  it('有效计划要求名称、训练日和动作，草稿只要求合法名称', () => {
+  it('有效计划要求名称、训练日和动作', () => {
     const editor = createPlanEditor({
       defaultWeightUnit: 'kg',
       localDate: '2026-07-14',
@@ -10,22 +10,13 @@ describe('计划编辑模块', () => {
       createId: (kind) => `${kind}-1`,
     })
 
-    expect(editor.validate(editor.initial, 'active')).toMatchObject({
+    expect(editor.validate(editor.initial)).toMatchObject({
       valid: false,
       fields: {
         name: '请输入 1–80 个字符的计划名称',
         weekdays: '至少选择一个训练日',
         exercises: '至少添加一个训练动作',
       },
-    })
-    expect(editor.validate(editor.initial, 'draft')).toMatchObject({
-      valid: false,
-      fields: { name: '请输入 1–80 个字符的计划名称' },
-    })
-    expect(editor.validate({ ...editor.initial, name: ' Push Day ' }, 'draft')).toEqual({
-      valid: true,
-      fields: {},
-      exercises: {},
     })
   })
 
@@ -53,7 +44,6 @@ describe('计划编辑模块', () => {
           weekdays: [1],
           exercises: [exercise],
         },
-        'active',
       ),
     ).toMatchObject({
       valid: false,
@@ -82,7 +72,6 @@ describe('计划编辑模块', () => {
         weekdays: [2],
         exercises: [duration],
       },
-      'active',
     )
     expect(result.exercises['duration-1']).toEqual({
       targetSeconds: '时长必须是 1–86400 秒的整数',
@@ -90,7 +79,7 @@ describe('计划编辑模块', () => {
     })
   })
 
-  it('把编辑草稿转换为排序稳定的领域聚合并识别脏状态', () => {
+  it('把编辑内容转换为排序稳定的领域聚合并识别脏状态', () => {
     let sequence = 0
     const editor = createPlanEditor({
       defaultWeightUnit: 'kg',
@@ -122,7 +111,7 @@ describe('计划编辑模块', () => {
     const reordered = editor.moveExercise(draft, rope.id, 'up')
     expect(reordered.exercises.map(({ name }) => name)).toEqual(['跳绳', ' 卧推 '])
 
-    expect(editor.toAggregate(reordered, 'active')).toMatchObject({
+    expect(editor.toAggregate(reordered)).toMatchObject({
       plan: {
         id: 'plan-1',
         name: 'Push Day',
@@ -172,11 +161,11 @@ describe('计划编辑模块', () => {
       name: 'Push Day',
       weekdays: [1],
       exercises: [exercise],
-    }, 'active')
+    })
     aggregate.exercises[0]!.exercise.notes = '保持肩胛稳定'
 
     const editor = createPlanEditor({ ...options, aggregate })
-    const updated = editor.toAggregate({ ...editor.initial, name: 'Push A' }, 'active')
+    const updated = editor.toAggregate({ ...editor.initial, name: 'Push A' })
 
     expect(updated.exercises[0]!.exercise).toMatchObject({
       notes: '保持肩胛稳定',

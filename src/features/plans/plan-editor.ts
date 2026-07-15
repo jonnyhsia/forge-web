@@ -1,7 +1,6 @@
 import type {
   ExerciseTarget,
   PlanCategory,
-  PlanStatus,
   Weekday,
   WeightValue,
   WeightUnit,
@@ -49,14 +48,14 @@ export interface PlanEditorOptions {
 export interface PlanEditor {
   initial: PlanDraft
   createExercise(): PlanExerciseDraft
-  validate(draft: PlanDraft, status: PlanStatus): PlanValidation
+  validate(draft: PlanDraft): PlanValidation
   isDirty(draft: PlanDraft): boolean
   moveExercise(
     draft: PlanDraft,
     exerciseId: string,
     direction: 'up' | 'down',
   ): PlanDraft
-  toAggregate(draft: PlanDraft, status: PlanStatus): PlanAggregate
+  toAggregate(draft: PlanDraft): PlanAggregate
 }
 
 function isIntegerBetween(value: number, minimum: number, maximum: number) {
@@ -158,7 +157,7 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
       ]
       return { ...draft, exercises }
     },
-    toAggregate(draft, status) {
+    toAggregate(draft) {
       const timestamp = options.now()
       const originalPlan = options.aggregate?.plan
       const description = draft.description.trim()
@@ -170,7 +169,7 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
           id: draft.id,
           name: draft.name.trim(),
           description: description || undefined,
-          status,
+          status: 'active',
           category: draft.category,
           weekdays: [...draft.weekdays].sort((left, right) => left - right),
           ...(localTime ? { localTime } : {}),
@@ -240,17 +239,17 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
         }),
       }
     },
-    validate(draft, status) {
+    validate(draft) {
       const fields: PlanValidation['fields'] = {}
       const exercises: PlanValidation['exercises'] = {}
       const nameLength = draft.name.trim().length
       if (nameLength < 1 || nameLength > 80) {
         fields.name = '请输入 1–80 个字符的计划名称'
       }
-      if (status === 'active' && draft.weekdays.length === 0) {
+      if (draft.weekdays.length === 0) {
         fields.weekdays = '至少选择一个训练日'
       }
-      if (status === 'active' && draft.exercises.length === 0) {
+      if (draft.exercises.length === 0) {
         fields.exercises = '至少添加一个训练动作'
       }
 
