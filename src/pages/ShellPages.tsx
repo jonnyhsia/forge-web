@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatedNumber, Button, Card, Dialog, Progress, SegmentedControl, StatePanel } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
 import { useForgeStore } from '../store'
@@ -327,7 +327,7 @@ export function HistoryPage() {
   const cachedStatistics = statistics.value.find((item) => item.scope === 'cached')
 
   return (
-    <Page fixedContent={<RecordSegments active="history" />} title="记录">
+    <>
       {history.status === 'loading' && history.items.length === 0 ? (
         <StatePanel kind="loading" title="读取训练记录" description="正在读取本地完成快照。" />
       ) : history.status === 'error' ? (
@@ -358,7 +358,7 @@ export function HistoryPage() {
           </div>
         </>
       )}
-    </Page>
+    </>
   )
 }
 
@@ -423,7 +423,7 @@ export function StatisticsPage() {
   }
 
   return (
-    <Page fixedContent={<RecordSegments active="statistics" />} title="记录">
+    <>
       <div aria-label="统计来源" className="statistics-scope">
         <button aria-pressed={scope === 'cached'} onClick={() => selectScope('cached')}>当前缓存</button>
         <button aria-pressed={scope === 'remote'} onClick={() => selectScope('remote')}>服务端最新</button>
@@ -443,7 +443,7 @@ export function StatisticsPage() {
       ) : (
         <StatisticsContent cache={cache} stale={statistics.status === 'error'} />
       )}
-    </Page>
+    </>
   )
 }
 
@@ -800,12 +800,29 @@ function FocusedPlaceholder({ backTo, eyebrow, title, description }: { backTo: s
   )
 }
 
-function RecordSegments({ active }: { active: 'history' | 'statistics' }) {
+export function RecordsLayout() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const active = location.pathname.includes('/statistics') ? 'statistics' : 'history'
+
   return (
-    <nav aria-label="记录类型" className="segments">
-      <Link aria-current={active === 'history' ? 'page' : undefined} className={active === 'history' ? 'segments__active' : ''} to="/history">训练记录</Link>
-      <Link aria-current={active === 'statistics' ? 'page' : undefined} className={active === 'statistics' ? 'segments__active' : ''} to="/statistics">数据统计</Link>
-    </nav>
+    <Page
+      fixedContent={(
+        <SegmentedControl
+          label="记录类型"
+          labelVisible={false}
+          onChange={(value) => navigate(`/${value}`)}
+          options={[
+            { value: 'history', label: '训练记录' },
+            { value: 'statistics', label: '数据统计' },
+          ]}
+          value={active}
+        />
+      )}
+      title="记录"
+    >
+      <Outlet />
+    </Page>
   )
 }
 

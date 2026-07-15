@@ -17,6 +17,7 @@ import {
   RouteErrorPage,
   SettingsPage,
   StatisticsPage,
+  RecordsLayout,
 } from '../pages/ShellPages'
 import { ROUTE_PATHS } from './route-paths'
 
@@ -35,9 +36,14 @@ export const router = createBrowserRouter(
         { path: ROUTE_PATHS.planDetail, Component: PlanDetailPage },
         { path: ROUTE_PATHS.trainingStart, Component: TrainingStartPage },
         { path: ROUTE_PATHS.trainingSession, Component: TrainingSessionPage },
-        { path: ROUTE_PATHS.history, Component: HistoryPage },
+        {
+          Component: RecordsLayout,
+          children: [
+            { path: ROUTE_PATHS.history, Component: HistoryPage },
+            { path: ROUTE_PATHS.statistics, Component: StatisticsPage },
+          ],
+        },
         { path: ROUTE_PATHS.historyDetail, Component: HistoryDetailPage },
-        { path: ROUTE_PATHS.statistics, Component: StatisticsPage },
         { path: ROUTE_PATHS.settings, Component: SettingsPage },
         { path: '*', Component: NotFoundPage },
       ],
