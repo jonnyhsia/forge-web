@@ -9,6 +9,7 @@ export type IconName =
   | 'chevron-right'
   | 'clock'
   | 'cloud-off'
+  | 'empty'
   | 'home'
   | 'minus'
   | 'mobility'
@@ -37,6 +38,7 @@ const paths: Record<IconName, React.ReactNode> = {
   'chevron-right': <path d="m9 18 6-6-6-6" />,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   'cloud-off': <><path d="m2 2 20 20" /><path d="M5.8 5.8A7 7 0 0 0 5 19h11.2" /><path d="M9.3 3.7A7 7 0 0 1 19 10.6 4.5 4.5 0 0 1 20.5 19" /></>,
+  empty: <><path d="M4 7h16l2 5v7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-7l2-5Z" /><path d="M2 12h5l2 3h6l2-3h5" /></>,
   home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
   minus: <path d="M5 12h14" />,
   mobility: <><circle cx="12" cy="4" r="2" /><path d="m8 21 2-7-4-3 3-4 3 3 3-2 3 3" /><path d="m14 21-2-7" /></>,

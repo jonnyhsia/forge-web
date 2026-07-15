@@ -426,7 +426,7 @@ export interface StatePanelProps {
 }
 
 const stateIcons: Record<StatePanelProps['kind'], IconName> = {
-  empty: 'plus',
+  empty: 'empty',
   loading: 'spinner',
   error: 'alert',
   offline: 'cloud-off',
