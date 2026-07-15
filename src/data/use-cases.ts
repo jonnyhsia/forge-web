@@ -1,4 +1,5 @@
 import {
+  createEntityId,
   nowIso,
   type AppSettings,
   type EntityId,
@@ -528,7 +529,7 @@ export interface ForgeDataUseCases {
 export function createForgeDataUseCases(
   database: ForgeDatabase,
   runtime: WorkoutRuntimeDependencies = {
-    createId: () => crypto.randomUUID(),
+    createId: createEntityId,
     now: nowIso,
   },
 ): ForgeDataUseCases {

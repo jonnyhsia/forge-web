@@ -7,7 +7,7 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import { DataError, toDataError } from '../../data'
-import type { WeightValue } from '../../domain'
+import { createEntityId, type WeightValue } from '../../domain'
 import { useForgeStore } from '../../store'
 import { browserReminderService } from '../../notifications'
 import { Icon } from '../../ui/Icon'
@@ -28,7 +28,7 @@ import './training.css'
 
 function createStoreTrainingAdapter(): TrainingUiAdapter {
   return createTrainingUiAdapter({
-    createId: () => crypto.randomUUID(),
+    createId: createEntityId,
     gateway: {
       start: (input) => useForgeStore.getState().startWorkout(input),
       async get(sessionId) {

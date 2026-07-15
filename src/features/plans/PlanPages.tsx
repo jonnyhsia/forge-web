@@ -8,7 +8,7 @@ import {
 } from 'react-router-dom'
 import type { PlanAggregate } from '../../data'
 import type { DataError } from '../../data'
-import type { Weekday } from '../../domain'
+import { createEntityId, type Weekday } from '../../domain'
 import { useForgeStore } from '../../store'
 import {
   AnimatedNumber,
@@ -189,7 +189,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     defaultWeightUnit,
     localDate: new Date().toLocaleDateString('en-CA'),
     now: () => new Date().toISOString(),
-    createId: () => crypto.randomUUID(),
+    createId: createEntityId,
   }), [aggregate, defaultWeightUnit])
   const [draft, setDraft] = useState(editor.initial)
   const [validation, setValidation] = useState<PlanValidation>({ valid: true, fields: {}, exercises: {} })
