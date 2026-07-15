@@ -9,7 +9,6 @@
 html {
   min-width: 320px;
   height: 100vh;
-  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
   background: var(--color-canvas);
@@ -24,7 +23,6 @@ html {
 body {
   min-width: 320px;
   height: 100vh;
-  height: 100dvh;
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
@@ -73,9 +71,7 @@ svg {
 }
 
 #root {
-  height: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
   overflow: hidden;
 }
 

@@ -1,5 +1,5 @@
 .page, .focused-page { height: 100%; min-height: 0; }
-.page { display: flex; flex-direction: column; overflow: hidden; padding: max(var(--space-5), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) 0 max(var(--space-5), env(safe-area-inset-left)); }
+.page { display: flex; flex-direction: column; overflow: hidden; padding: max(0px, calc(var(--space-5) - var(--app-safe-area-top, env(safe-area-inset-top)))) max(var(--space-5), env(safe-area-inset-right)) 0 max(var(--space-5), env(safe-area-inset-left)); }
 .page-header { min-height: 3.5rem; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .page-header h1 { margin: 0; color: var(--color-text); font-size: var(--text-xl); }
 .page-header .page-eyebrow { margin: 0 0 var(--space-1); color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; }
@@ -16,7 +16,7 @@
 .hero-card__label { margin: 0; color: var(--color-accent); font-family: var(--font-mono); font-size: var(--text-xs); letter-spacing: .08em; }
 .hero-card h2 { margin: var(--space-2) 0; font-family: var(--font-display); font-size: 2rem; }
 .hero-card > p:not(.hero-card__label) { margin: 0 0 var(--space-5); color: var(--color-text-muted); font-size: var(--text-sm); }
-.focused-page { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: max(var(--space-4), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-5), env(safe-area-inset-left)); }
+.focused-page { display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: max(0px, calc(var(--space-4) - var(--app-safe-area-top, env(safe-area-inset-top)))) max(var(--space-5), env(safe-area-inset-right)) max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-5), env(safe-area-inset-left)); }
 .focused-header { min-height: 3.5rem; display: flex; align-items: center; gap: var(--space-3); }
 .focused-header p { margin: 0; color: var(--color-text-muted); font-family: var(--font-mono); font-size: .625rem; letter-spacing: .08em; }
 .focused-header h1 { margin: var(--space-1) 0 0; font-size: var(--text-md); }
