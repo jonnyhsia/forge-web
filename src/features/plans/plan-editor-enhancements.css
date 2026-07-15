@@ -3,6 +3,24 @@
   user-select: none;
 }
 
+.plan-editor-body {
+  overflow-x: hidden;
+  touch-action: pan-y;
+}
+
+.plan-editor-section label:not(.ui-field),
+.exercise-form label:not(.ui-field),
+.plan-textarea-label {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@supports (-webkit-touch-callout: none) {
+  .plan-editor-section input[type='time'] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+
 .plan-editor-header__actions {
   display: flex;
   align-items: center;
