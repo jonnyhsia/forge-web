@@ -19,6 +19,7 @@ import {
   type PlanValidation,
 } from './plan-editor'
 import './plans.css'
+import './plan-editor-enhancements.css'
 
 const WEEKDAYS: Array<{ value: Weekday; label: string }> = [
   { value: 1, label: '一' },
@@ -172,6 +173,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const weekdayGesture = useRef<{ select: boolean; visited: Set<Weekday> } | null>(null)
   const blocker = useBlocker(
     () =>
       !allowNavigation.current &&
@@ -211,13 +213,36 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     }
   }
 
-  const saveAndStay = async () => {
+  const saveAndClose = async () => {
     if (!(await persist())) return
-    if (!aggregate) {
-      allowNavigation.current = true
-      navigate(`/plans/${draft.id}`, { replace: true })
-    }
+    allowNavigation.current = true
+    navigate('/plans', { replace: true })
   }
+
+  const applyWeekdayGesture = (weekday: Weekday) => {
+    const gesture = weekdayGesture.current
+    if (!gesture || gesture.visited.has(weekday)) return
+    gesture.visited.add(weekday)
+    setDraft((current) => ({ ...current, weekdays: gesture.select
+      ? [...new Set([...current.weekdays, weekday])].sort()
+      : current.weekdays.filter((day) => day !== weekday) }))
+  }
+
+  const startWeekdayGesture = (event: React.PointerEvent, weekday: Weekday) => {
+    event.preventDefault()
+    weekdayGesture.current = { select: !draft.weekdays.includes(weekday), visited: new Set<Weekday>() }
+    event.currentTarget.setPointerCapture(event.pointerId)
+    applyWeekdayGesture(weekday)
+  }
+
+  const moveWeekdayGesture = (event: React.PointerEvent) => {
+    if (!weekdayGesture.current) return
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLButtonElement>('[data-weekday]')
+    const weekday = Number(target?.dataset.weekday) as Weekday
+    if (weekday >= 1 && weekday <= 7) applyWeekdayGesture(weekday)
+  }
+
+  const endWeekdayGesture = () => { weekdayGesture.current = null }
 
   const saveExercise = (exercise: PlanExerciseDraft) => {
     const result = editor.validate({ ...draft, name: 'Valid', weekdays: [1], exercises: [exercise] }, 'active')
@@ -276,7 +301,6 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
       <div className="plan-editor-body">
         <section className="plan-editor-section">
           <Field error={validation.fields.name} label="计划名称" maxLength={80} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-          <label className="plan-textarea-label">计划描述（可选）<textarea maxLength={240} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
           <div className="plan-grid">
             <label>训练类别<select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as PlanDraft['category'] })}>{Object.entries(CATEGORY_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <label>计划开始时间（可选）<input type="time" value={draft.localTime} onChange={(event) => setDraft({ ...draft, localTime: event.target.value })} /></label>
@@ -285,16 +309,19 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
 
         <section className="plan-editor-section">
           <div className="plan-section-heading"><div><p>TRAINING DAYS</p><h2>训练日</h2></div>{validation.fields.weekdays ? <span>{validation.fields.weekdays}</span> : null}</div>
-          <div className="weekday-picker">{WEEKDAYS.map(({ value, label }) => {
+          <div className="weekday-picker" onPointerMove={moveWeekdayGesture} onPointerUp={endWeekdayGesture} onPointerCancel={endWeekdayGesture}>{WEEKDAYS.map(({ value, label }) => {
             const selected = draft.weekdays.includes(value)
-            return <button aria-pressed={selected} className={selected ? 'weekday-picker__active' : ''} key={value} onClick={() => setDraft({ ...draft, weekdays: selected ? draft.weekdays.filter((day) => day !== value) : [...draft.weekdays, value].sort() })}>{label}</button>
+            return <button aria-pressed={selected} className={selected ? 'weekday-picker__active' : ''} data-weekday={value} key={value} onClick={(event) => {
+              if (event.detail !== 0) return
+              setDraft((current) => ({ ...current, weekdays: current.weekdays.includes(value) ? current.weekdays.filter((day) => day !== value) : [...current.weekdays, value].sort() }))
+            }} onPointerDown={(event) => startWeekdayGesture(event, value)}>{label}</button>
           })}</div>
         </section>
 
         <section className="plan-editor-section">
-          <div className="plan-section-heading"><div><p>EXERCISES</p><h2>训练动作</h2></div><Button leadingIcon="plus" variant="secondary" onClick={() => setEditingExercise(editor.createExercise())}>添加动作</Button></div>
+          <div className="plan-section-heading"><div><p>EXERCISES</p><h2>训练动作</h2></div>{draft.exercises.length > 0 ? <Button leadingIcon="plus" variant="secondary" onClick={() => setEditingExercise(editor.createExercise())}>添加动作</Button> : null}</div>
           {validation.fields.exercises ? <p className="plan-field-error">{validation.fields.exercises}</p> : null}
-          {draft.exercises.length === 0 ? <div className="exercise-empty">尚未添加动作</div> : (
+          {draft.exercises.length === 0 ? <button className="exercise-empty" onClick={() => setEditingExercise(editor.createExercise())}><Icon name="plus" size={20} /><span>尚未添加动作<small>点击添加</small></span></button> : (
             <div className="exercise-list">{draft.exercises.map((exercise, index) => (
               <div className="exercise-row" draggable key={exercise.id} onDragStart={() => setDraggingId(exercise.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropExercise(exercise.id)}>
                 <span aria-hidden="true" className="drag-handle">⋮⋮</span>
@@ -310,7 +337,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
       </div>
 
       <footer className="plan-editor-actions">
-        <Button disabled={submitting} fullWidth onClick={() => void saveAndStay()}>{submitting ? '保存中…' : '保存计划'}</Button>
+        <Button disabled={submitting} fullWidth onClick={() => void saveAndClose()}>{submitting ? '保存中…' : '保存计划'}</Button>
       </footer>
 
       {editingExercise ? <ExerciseDialog exercise={editingExercise} onClose={() => setEditingExercise(null)} onDelete={() => removeExercise(editingExercise.id)} onSave={saveExercise} /> : null}

@@ -1,0 +1,26 @@
+.weekday-picker {
+  touch-action: none;
+  user-select: none;
+}
+
+.exercise-empty {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.exercise-empty span,
+.exercise-empty small {
+  display: block;
+}
+
+.exercise-empty small {
+  margin-top: .2rem;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
