@@ -68,6 +68,7 @@ export function DashboardPage() {
   const selectedDate =
     focusDate >= range.start && focusDate <= range.end ? focusDate : range.today
   const dayRefs = useRef<Record<string, HTMLElement | null>>({})
+  const didInitialTimelineScroll = useRef(false)
 
   const selectDate = (nextDate: string) => {
     setSearchParams(nextDate === range.today ? {} : { date: nextDate })
@@ -75,6 +76,15 @@ export function DashboardPage() {
   }
 
   const snapshot = dashboard.value
+
+  useEffect(() => {
+    if (!snapshot || didInitialTimelineScroll.current) return
+    const selectedDay = dayRefs.current[selectedDate]
+    if (!selectedDay) return
+
+    didInitialTimelineScroll.current = true
+    selectedDay.scrollIntoView({ block: 'start' })
+  }, [selectedDate, snapshot])
 
   useEffect(() => {
     browserReminderScheduler.cancelAll()
@@ -172,6 +182,7 @@ export function DashboardPage() {
         onClose={() => setShowSyncDetails(false)}
         open={showSyncDetails}
         title="待同步更改"
+        className="dashboard-sync-sheet"
       >
         <div className="dashboard-sync-dialog">
           <p>{pendingSyncCount} 项更改已安全保存在本机。</p>
@@ -251,7 +262,7 @@ function DashboardWorkoutCard({ occurrence }: { occurrence: DashboardOccurrence 
             ) : null}
           </div>
         </header>
-        {occurrence.totalExercises > 0 ? (
+        {occurrence.status !== 'planned' && occurrence.totalExercises > 0 ? (
           <Progress label={`${occurrence.completedExercises} / ${occurrence.totalExercises} 个动作`} value={progress} />
         ) : null}
         {typeof minutes === 'number' ? (
