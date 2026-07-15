@@ -318,7 +318,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
       <header className="plan-editor-header">
         <Link aria-label="返回计划" className="back-link" to="/plans"><Icon name="arrow-left" size={18} /></Link>
         <div><p>{aggregate ? '编辑计划' : '新建计划'}</p><h1>{draft.name.trim() || '未命名计划'}</h1></div>
-        {aggregate ? <span className="plan-status-badge">{syncLabel(aggregate.plan.sync.status)}</span> : null}
+        {aggregate ? <div className="plan-editor-header__actions"><span className="plan-status-badge">{syncLabel(aggregate.plan.sync.status)}</span><button aria-label="删除计划" className="plan-delete-button" disabled={submitting} onClick={() => setDeleteOpen(true)} type="button"><Icon name="trash" size={18} /></button></div> : null}
       </header>
 
       <div className="plan-editor-body top-fading-edge">
@@ -356,7 +356,6 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
         </section>
 
         {submitError || plansError ? <div className="plan-submit-error" role="alert">{submitError || dataErrorMessage(plansError)}</div> : null}
-        {aggregate ? <Button variant="danger" onClick={() => setDeleteOpen(true)}>删除计划</Button> : null}
       </div>
 
       <footer className="plan-editor-actions">
