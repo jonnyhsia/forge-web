@@ -61,22 +61,25 @@ export function AppShell() {
       </main>
 
       {route.shell === 'standard' && state.content === 'ready' ? (
-        <nav aria-label="主要导航" className="bottom-navigation">
-          {navigation.map((item) => {
-            const active = route.navigation === item.section
-            return (
-              <NavLink
-                aria-current={active ? 'page' : undefined}
-                className={`bottom-navigation__item ${active ? 'bottom-navigation__item--active' : ''}`}
-                key={item.section}
-                to={item.path}
-              >
-                <Icon name={item.icon} size={20} strokeWidth={active ? 2.2 : 1.6} />
-                <span>{item.label}</span>
-              </NavLink>
-            )
-          })}
-        </nav>
+        <>
+          <nav aria-label="主要导航" className="bottom-navigation">
+            {navigation.map((item) => {
+              const active = route.navigation === item.section
+              return (
+                <NavLink
+                  aria-current={active ? 'page' : undefined}
+                  className={`bottom-navigation__item ${active ? 'bottom-navigation__item--active' : ''}`}
+                  key={item.section}
+                  to={item.path}
+                >
+                  <Icon name={item.icon} size={20} strokeWidth={active ? 2.2 : 1.6} />
+                  <span>{item.label}</span>
+                </NavLink>
+              )
+            })}
+          </nav>
+          <div className="bottom-navigation-placeholder" />
+        </>
       ) : null}
     </div>
   )

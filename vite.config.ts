@@ -34,7 +34,7 @@ export default defineConfig({
         scope: base,
         display: 'standalone',
         theme_color: '#0d0d0d',
-        background_color: '#030303',
+        background_color: '#0d0d0d',
         categories: ['fitness', 'health'],
         icons: [
           {
