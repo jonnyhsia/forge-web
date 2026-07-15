@@ -101,3 +101,12 @@ svg {
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
+
+/* 隐藏默认滚动条 */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+}
