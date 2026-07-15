@@ -1,0 +1,34 @@
+.weekly-training-summary {
+  flex: 0 0 auto;
+  padding: var(--space-5);
+  border-color: rgb(192 255 0 / 18%);
+  box-shadow: var(--shadow-accent);
+}
+
+.weekly-training-summary .hero-card__label {
+  margin: 0;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+}
+
+.weekly-training-summary h2 {
+  margin: var(--space-3) 0;
+  font-family: var(--font-display);
+  font-size: 3.25rem;
+  line-height: 1;
+}
+
+.weekly-training-summary > p:not(.hero-card__label) {
+  margin: 0 0 var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.weekly-training-summary__stale {
+  display: block;
+  margin-top: var(--space-3);
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+}

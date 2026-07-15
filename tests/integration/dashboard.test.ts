@@ -93,6 +93,10 @@ describe('dashboard', () => {
       range,
       plans: [plan('morning'), plan('evening', { localTime: '18:30' })],
       sessions: [],
+      planExerciseCounts: new Map([
+        ['morning', 5],
+        ['evening', 3],
+      ]),
     })
 
     expect(days).toHaveLength(7)
@@ -104,6 +108,7 @@ describe('dashboard', () => {
       'morning:2026-07-14',
       'evening:2026-07-14',
     ])
+    expect(days[1].occurrences.map((item) => item.totalExercises)).toEqual([5, 3])
     expect(days[2]).toMatchObject({ status: 'rest', occurrences: [] })
   })
 
@@ -117,8 +122,11 @@ describe('dashboard', () => {
     expect(days[0].occurrences).toEqual([
       expect.objectContaining({
         planName: 'Snapshot changed',
+        category: 'strength',
         status: 'completed',
         sessionId: 'past',
+        startedAt: '2026-07-13T08:00:00+08:00',
+        endedAt: '2026-07-13T08:45:00+08:00',
       }),
     ])
   })
@@ -196,6 +204,21 @@ describe('dashboard', () => {
     try {
       await database.open()
       await database.trainingPlans.put(plan('a'))
+      await database.planExercises.put({
+        id: 'a-exercise',
+        planId: 'a',
+        exerciseId: 'bench',
+        position: 0,
+        target: {
+          type: 'repetitions',
+          targetSets: 3,
+          targetRepetitions: 8,
+          weight: { mode: 'external', value: 60, unit: 'kg' },
+        },
+        createdAt: '2026-07-01T08:00:00+08:00',
+        updatedAt: '2026-07-01T08:00:00+08:00',
+        sync: { status: 'local' },
+      })
       await database.workoutSessions.put(completed)
       await database.statisticsCaches.put({
         key: 'cached:rolling-8-weeks',
@@ -220,6 +243,7 @@ describe('dashboard', () => {
       expect(snapshot.recentWorkout?.id).toBe('recent')
       expect(snapshot.statistics?.summary.weeklyWorkoutCount).toBe(1)
       expect(snapshot.days[1].status).toBe('completed')
+      expect(snapshot.days[1].occurrences[0]?.totalExercises).toBe(1)
     } finally {
       database.close()
     }

@@ -3,17 +3,24 @@ import type { SVGProps } from 'react'
 export type IconName =
   | 'arrow-left'
   | 'alert'
+  | 'bell'
+  | 'cardio'
   | 'check'
   | 'chevron-right'
+  | 'clock'
   | 'cloud-off'
   | 'home'
   | 'minus'
+  | 'mobility'
+  | 'more-horizontal'
   | 'plans'
   | 'plus'
+  | 'play'
   | 'records'
   | 'refresh'
   | 'settings'
   | 'spinner'
+  | 'strength'
   | 'trash'
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
@@ -24,17 +31,24 @@ export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 const paths: Record<IconName, React.ReactNode> = {
   'arrow-left': <path d="m15 18-6-6 6-6" />,
   alert: <><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.8 2.2 18a2 2 0 0 0 1.8 3h16a2 2 0 0 0 1.8-3L13.7 3.8a2 2 0 0 0-3.4 0Z" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
+  cardio: <><path d="M3 12h4l2-5 4 10 2-5h6" /><path d="M19.5 5.5A4.2 4.2 0 0 0 12 8 4.2 4.2 0 0 0 4.5 5.5" /></>,
   check: <path d="m5 12 4 4L19 6" />,
   'chevron-right': <path d="m9 18 6-6-6-6" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   'cloud-off': <><path d="m2 2 20 20" /><path d="M5.8 5.8A7 7 0 0 0 5 19h11.2" /><path d="M9.3 3.7A7 7 0 0 1 19 10.6 4.5 4.5 0 0 1 20.5 19" /></>,
   home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
   minus: <path d="M5 12h14" />,
+  mobility: <><circle cx="12" cy="4" r="2" /><path d="m8 21 2-7-4-3 3-4 3 3 3-2 3 3" /><path d="m14 21-2-7" /></>,
+  'more-horizontal': <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
   plans: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
+  play: <path d="m9 7 8 5-8 5Z" fill="currentColor" stroke="none" />,
   records: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /></>,
   refresh: <><path d="M20 6v5h-5" /><path d="M4 18v-5h5" /><path d="M6.1 9a7 7 0 0 1 11.7-2.6L20 11" /><path d="M17.9 15a7 7 0 0 1-11.7 2.6L4 13" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
   spinner: <path d="M21 12a9 9 0 1 1-6.2-8.6" />,
+  strength: <><path d="M6 7v10M18 7v10M3 9v6M21 9v6M6 12h12" /></>,
   trash: <><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="m19 6-1 14H6L5 6" /><path d="M10 11v5" /><path d="M14 11v5" /></>,
 }
 

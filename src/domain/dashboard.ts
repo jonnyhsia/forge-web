@@ -33,6 +33,8 @@ interface DashboardOccurrenceDetails {
   localTime?: string
   completedExercises: number
   totalExercises: number
+  startedAt?: string
+  endedAt?: string
 }
 
 export type DashboardOccurrence = DashboardOccurrenceDetails &
@@ -59,6 +61,7 @@ export interface DeriveDashboardScheduleInput {
   range: DashboardRange
   plans: TrainingPlan[]
   sessions: WorkoutSession[]
+  planExerciseCounts?: ReadonlyMap<string, number>
 }
 
 export function dashboardWeekRange(
@@ -78,7 +81,9 @@ export function deriveDashboardSchedule({
   range,
   plans,
   sessions,
+  planExerciseCounts = new Map(),
 }: DeriveDashboardScheduleInput): DashboardDay[] {
+  const plansById = new Map(plans.map((plan) => [plan.id, plan]))
   const sessionsByOccurrence = new Map<string, WorkoutSession>()
 
   for (const session of sessions) {
@@ -98,7 +103,14 @@ export function deriveDashboardSchedule({
       for (const plan of plans) {
         if (!planMatchesDate(plan, localDate)) continue
         const key = `${plan.id}:${localDate}`
-        occurrences.set(key, occurrenceFromPlan(plan, localDate))
+        occurrences.set(
+          key,
+          occurrenceFromPlan(
+            plan,
+            localDate,
+            planExerciseCounts.get(plan.id) ?? 0,
+          ),
+        )
       }
     }
 
@@ -106,7 +118,7 @@ export function deriveDashboardSchedule({
       if (occurrenceLocalDate(session) !== localDate) continue
       occurrences.set(
         session.scheduleOccurrenceKey,
-        occurrenceFromSession(session),
+        occurrenceFromSession(session, plansById.get(session.planId)?.category),
       )
     }
 
@@ -129,6 +141,7 @@ export function deriveDashboardSchedule({
 function occurrenceFromPlan(
   plan: TrainingPlan,
   localDate: string,
+  totalExercises: number,
 ): DashboardOccurrence {
   return {
     key: `${plan.id}:${localDate}`,
@@ -139,11 +152,14 @@ function occurrenceFromPlan(
     localTime: plan.localTime,
     status: 'planned',
     completedExercises: 0,
-    totalExercises: 0,
+    totalExercises,
   }
 }
 
-function occurrenceFromSession(session: WorkoutSession): DashboardOccurrence {
+function occurrenceFromSession(
+  session: WorkoutSession,
+  category?: PlanCategory,
+): DashboardOccurrence {
   const completedExercises = session.exercises.filter((exercise) => {
     const completedSets = new Set(exercise.sets.map((set) => set.setNumber))
     return completedSets.size >= exercise.target.targetSets
@@ -154,9 +170,12 @@ function occurrenceFromSession(session: WorkoutSession): DashboardOccurrence {
     localDate: occurrenceLocalDate(session)!,
     planId: session.planId,
     planName: session.planName,
+    category,
     localTime: timeFromIso(session.startedAt),
     completedExercises,
     totalExercises: session.exercises.length,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
   }
   if (session.status === 'completed') {
     return { ...details, status: 'completed', sessionId: session.id }

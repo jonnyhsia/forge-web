@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatedNumber, Button, Card, Dialog, Progress, SegmentedControl, StatePanel } from '../ui/primitives'
-import { Icon } from '../ui/Icon'
+import { Icon, type IconName } from '../ui/Icon'
 import { useForgeStore } from '../store'
 import {
-  dashboardWeekRange,
   rollingEightWeekRange,
   type DashboardDay,
   type DashboardDayStatus,
@@ -12,6 +11,7 @@ import {
   type StatisticsCache,
   type WorkoutSession,
 } from '../domain'
+import { useWeeklyDashboard } from '../features/dashboard/useWeeklyDashboard'
 import {
   browserReminderScheduler,
   browserReminderService,
@@ -27,13 +27,14 @@ const WEIGHT_UNIT_OPTIONS = [
   { value: 'lb', label: 'lbs' },
 ] as const
 
-function Page({ eyebrow, title, action, fixedContent, children }: { eyebrow?: string; title: string; action?: ReactNode; fixedContent?: ReactNode; children: ReactNode }) {
+function Page({ eyebrow, title, subtitle, action, fixedContent, className = '', children }: { eyebrow?: string; title: string; subtitle?: string; action?: ReactNode; fixedContent?: ReactNode; className?: string; children: ReactNode }) {
   return (
-    <div className="page">
+    <div className={`page ${className}`.trim()}>
       <header className="page-header">
         <div>
           {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
           <h1>{title}</h1>
+          {subtitle ? <p className="page-subtitle">{subtitle}</p> : null}
         </div>
         {action}
       </header>
@@ -55,38 +56,18 @@ function BackHeader({ to, label, title }: { to: string; label: string; title: st
 export function DashboardPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const dashboard = useForgeStore((state) => state.dashboard)
   const online = useForgeStore((state) => state.online)
   const pendingSyncCount = useForgeStore((state) => state.pendingSyncCount)
   const syncMode = useForgeStore((state) => state.syncMode)
-  const loadDashboard = useForgeStore((state) => state.loadDashboard)
-  const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
   const settings = useForgeStore((state) => state.settings.value)
   const [reminderMessage, setReminderMessage] = useState<string | null>(null)
   const [showSyncDetails, setShowSyncDetails] = useState(false)
   const requestedDate = searchParams.get('date')
   const focusDate = isLocalDate(requestedDate) ? requestedDate : localDate()
-  const range = dashboardWeekRange(dateFromLocalDate(focusDate))
+  const { dashboard, range } = useWeeklyDashboard(dateFromLocalDate(focusDate))
   const selectedDate =
     focusDate >= range.start && focusDate <= range.end ? focusDate : range.today
   const dayRefs = useRef<Record<string, HTMLElement | null>>({})
-
-  useEffect(() => {
-    let current = true
-    void (async () => {
-      await rebuildStatistics(rollingEightWeekRange())
-      if (current) {
-        await loadDashboard({
-          start: range.start,
-          end: range.end,
-          today: range.today,
-        })
-      }
-    })()
-    return () => {
-      current = false
-    }
-  }, [loadDashboard, range.end, range.start, range.today, rebuildStatistics])
 
   const selectDate = (nextDate: string) => {
     setSearchParams(nextDate === range.today ? {} : { date: nextDate })
@@ -109,17 +90,9 @@ export function DashboardPage() {
     }
 
   }, [settings?.reminderLeadMinutes, settings?.trainingReminderEnabled, snapshot])
-  const totalOccurrences = snapshot?.days.reduce(
-    (count, day) => count + day.occurrences.length,
-    0,
-  ) ?? 0
-  const completedOccurrences = snapshot?.days.reduce(
-    (count, day) =>
-      count + day.occurrences.filter((item) => item.status === 'completed').length,
-    0,
-  ) ?? 0
-
-  const openSyncDetails = () => setShowSyncDetails(true)
+  const openSyncDetails = () => {
+    if (pendingSyncCount > 0) setShowSyncDetails(true)
+  }
   const viewSyncDetails = () => {
     setShowSyncDetails(false)
     void navigate('/settings')
@@ -128,12 +101,36 @@ export function DashboardPage() {
   return (
     <>
       <Page
-        action={pendingSyncCount > 0 ? (
-          <button className="dashboard-sync-count" onClick={openSyncDetails} type="button">
-            {pendingSyncCount} 项待同步
+        action={(
+          <button
+            aria-label={pendingSyncCount > 0 ? `${pendingSyncCount} 项待同步` : '暂无待同步更改'}
+            className="dashboard-sync-bell"
+            disabled={pendingSyncCount === 0}
+            onClick={openSyncDetails}
+            type="button"
+          >
+            <Icon name="bell" size={14} />
+            {pendingSyncCount > 0 ? <i aria-hidden="true" /> : null}
           </button>
-        ) : null}
-        eyebrow="LOCAL TRAINING"
+        )}
+        className="dashboard-page"
+        fixedContent={(
+          <nav aria-label="本周日历" className="week-calendar">
+            {snapshot?.days.map((day) => (
+              <button
+                aria-current={day.localDate === selectedDate ? 'date' : undefined}
+                className={`week-calendar__day week-calendar__day--${day.status}`}
+                key={day.localDate}
+                onClick={() => selectDate(day.localDate)}
+              >
+                <span>{weekdayEnglishLabel(day.weekday)}</span>
+                <b><strong>{Number(day.localDate.slice(-2))}</strong></b>
+                <i aria-label={dayStatusLabel(day.status)} />
+              </button>
+            ))}
+          </nav>
+        )}
+        subtitle={formatMonth(selectedDate)}
         title="FORGE"
       >
       {reminderMessage ? (
@@ -142,28 +139,6 @@ export function DashboardPage() {
           <span>{reminderMessage}</span>
         </div>
       ) : null}
-
-      <Card className="hero-card dashboard-hero">
-        <p className="hero-card__label">本周训练</p>
-        <h2><AnimatedNumber value={completedOccurrences} /> / <AnimatedNumber value={totalOccurrences} /></h2>
-        <p>{totalOccurrences === 0 ? '本周暂无训练安排' : `${completedOccurrences} 场已完成，保持节奏。`}</p>
-        <Progress label="本周进度" value={totalOccurrences ? completedOccurrences / totalOccurrences * 100 : 0} />
-      </Card>
-
-      <nav aria-label="本周日历" className="week-calendar">
-        {snapshot?.days.map((day) => (
-          <button
-            aria-current={day.localDate === selectedDate ? 'date' : undefined}
-            className={`week-calendar__day week-calendar__day--${day.status}`}
-            key={day.localDate}
-            onClick={() => selectDate(day.localDate)}
-          >
-            <span>{weekdayLabel(day.weekday)}</span>
-            <strong>{Number(day.localDate.slice(-2))}</strong>
-            <i aria-label={dayStatusLabel(day.status)} />
-          </button>
-        ))}
-      </nav>
 
       {dashboard.status === 'loading' && !snapshot ? (
         <StatePanel kind="loading" title="整理本周训练" description="正在从本地计划和会话派生日程。" />
@@ -185,13 +160,6 @@ export function DashboardPage() {
         </>
       ) : null}
 
-      {snapshot ? (
-        <RecentWorkoutCard
-          session={snapshot.recentWorkout}
-          weeklyCount={snapshot.statistics?.summary.weeklyWorkoutCount}
-          streakDays={snapshot.statistics?.summary.streakDays}
-        />
-      ) : null}
       </Page>
 
       <Dialog
@@ -236,7 +204,7 @@ function DashboardDaySection({
         <strong>{isToday ? 'TODAY' : weekdayLabel(day.weekday)}</strong>
         <span>{formatLocalDate(day.localDate)}</span>
         <i />
-        <small>{day.occurrences.length ? `${completed}/${day.occurrences.length} · ${dayStatusLabel(day.status)}` : dayStatusLabel(day.status)}</small>
+        {day.occurrences.length ? <small>{completed}/{day.occurrences.length}</small> : null}
       </header>
       {day.occurrences.length ? (
         <div className="dashboard-occurrences">
@@ -254,7 +222,11 @@ function DashboardWorkoutCard({ occurrence }: { occurrence: DashboardOccurrence 
     ? occurrence.completedExercises / occurrence.totalExercises * 100
     : 0
   const category = categoryLabel(occurrence.category)
+  const categoryIcon = categoryIconName(occurrence.category)
   const status = occurrenceStatusLabel(occurrence.status)
+  const minutes = occurrence.status === 'planned'
+    ? undefined
+    : occurrenceMinutes(occurrence)
   const destination = occurrence.status === 'planned'
     ? `/training/start?planId=${encodeURIComponent(occurrence.planId)}&localDate=${occurrence.localDate}`
     : occurrence.status === 'completed'
@@ -266,15 +238,34 @@ function DashboardWorkoutCard({ occurrence }: { occurrence: DashboardOccurrence 
       <div className="dashboard-workout__time">{occurrence.localTime ?? '灵活'}</div>
       <Card className="dashboard-workout__card">
         <header>
-          <div><strong>{occurrence.planName}</strong><small>{category}</small></div>
-          <span>{status}</span>
+          <div className="dashboard-workout__heading">
+            <span className="dashboard-workout__icon"><Icon name={categoryIcon} size={16} /></span>
+            <div><strong>{occurrence.planName}</strong><small>{category}</small></div>
+          </div>
+          <div className="dashboard-workout__controls">
+            <span>{status}</span>
+            {occurrence.status === 'planned' ? (
+              <Link aria-label={`编辑${occurrence.planName}`} to={`/plans/${occurrence.planId}`}>
+                <Icon name="more-horizontal" size={15} />
+              </Link>
+            ) : null}
+          </div>
         </header>
         {occurrence.totalExercises > 0 ? (
           <Progress label={`${occurrence.completedExercises} / ${occurrence.totalExercises} 个动作`} value={progress} />
         ) : null}
+        {typeof minutes === 'number' ? (
+          <div className="dashboard-workout__metrics">
+            <Icon name="clock" size={13} />
+            <span>{minutes} min</span>
+          </div>
+        ) : null}
         <div className="dashboard-workout__actions">
-          {occurrence.status === 'planned' ? <Link to={`/plans/${occurrence.planId}`}>编辑计划</Link> : <span />}
-          <Link className="ui-button ui-button--primary" to={destination}>
+          <Link
+            className={`ui-button ${occurrence.status === 'in_progress' ? 'ui-button--primary' : 'ui-button--secondary'}`}
+            to={destination}
+          >
+            <Icon name="play" size={13} />
             {occurrence.status === 'planned' ? '开始训练' : occurrence.status === 'in_progress' ? '继续训练' : '查看记录'}
           </Link>
         </div>
@@ -313,11 +304,16 @@ function RecentWorkoutCard({
 
 export function HistoryPage() {
   const history = useForgeStore((state) => state.history)
+  const statistics = useForgeStore((state) => state.statistics)
   const loadHistory = useForgeStore((state) => state.loadHistory)
+  const rebuildStatistics = useForgeStore((state) => state.rebuildStatistics)
 
   useEffect(() => {
     void loadHistory({ reset: true })
-  }, [loadHistory])
+    void rebuildStatistics(rollingEightWeekRange())
+  }, [loadHistory, rebuildStatistics])
+
+  const cachedStatistics = statistics.value.find((item) => item.scope === 'cached')
 
   return (
     <Page fixedContent={<RecordSegments active="history" />} title="记录">
@@ -328,21 +324,28 @@ export function HistoryPage() {
       ) : history.items.length === 0 ? (
         <StatePanel kind="empty" title="暂无训练记录" description="完成第一场训练后，记录会显示在这里。" />
       ) : (
-        <div className="history-list">
-          {history.items.map((session) => (
-            <Link className="history-card" key={session.id} to={`/history/${session.id}`}>
-              <span>
-                <strong>{session.planName}</strong>
-                <small>{formatDateTime(session.endedAt)}</small>
-              </span>
-              <span className="history-card__meta">
-                <small>{session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)} 组</small>
-                <Icon name="chevron-right" size={14} />
-              </span>
-            </Link>
-          ))}
-          {history.nextCursor ? <button className="ui-button ui-button--secondary" onClick={() => void loadHistory()}>加载更多</button> : null}
-        </div>
+        <>
+          <RecentWorkoutCard
+            session={history.items[0]}
+            weeklyCount={cachedStatistics?.summary.weeklyWorkoutCount}
+            streakDays={cachedStatistics?.summary.streakDays}
+          />
+          <div className="history-list">
+            {history.items.map((session) => (
+              <Link className="history-card" key={session.id} to={`/history/${session.id}`}>
+                <span>
+                  <strong>{session.planName}</strong>
+                  <small>{formatDateTime(session.endedAt)}</small>
+                </span>
+                <span className="history-card__meta">
+                  <small>{session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)} 组</small>
+                  <Icon name="chevron-right" size={14} />
+                </span>
+              </Link>
+            ))}
+            {history.nextCursor ? <button className="ui-button ui-button--secondary" onClick={() => void loadHistory()}>加载更多</button> : null}
+          </div>
+        </>
       )}
     </Page>
   )
@@ -829,9 +832,18 @@ function weekdayLabel(weekday: DashboardDay['weekday']) {
   return ['一', '二', '三', '四', '五', '六', '日'][weekday - 1]
 }
 
+function weekdayEnglishLabel(weekday: DashboardDay['weekday']) {
+  return ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][weekday - 1]
+}
+
+function formatMonth(value: string) {
+  const [year, month] = value.split('-')
+  return `${year}年${Number(month)}月`
+}
+
 function formatLocalDate(value: string) {
   const [, month, day] = value.split('-')
-  return `${Number(month)}月${Number(day)}日`
+  return `${Number(month)}/${Number(day)}`
 }
 
 function dayStatusLabel(status: DashboardDayStatus) {
@@ -859,6 +871,24 @@ function categoryLabel(category: DashboardOccurrence['category']) {
     cardio: '有氧训练',
     mobility: '拉伸放松',
   }[category]
+}
+
+function categoryIconName(category: DashboardOccurrence['category']): IconName {
+  if (category === 'cardio') return 'cardio'
+  if (category === 'mobility') return 'mobility'
+  return 'strength'
+}
+
+function occurrenceMinutes(occurrence: DashboardOccurrence) {
+  if (!occurrence.startedAt) return undefined
+  const startedAt = new Date(occurrence.startedAt).getTime()
+  const endedAt = occurrence.endedAt
+    ? new Date(occurrence.endedAt).getTime()
+    : Date.now()
+  if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt) || endedAt <= startedAt) {
+    return undefined
+  }
+  return Math.max(1, Math.round((endedAt - startedAt) / 60_000))
 }
 
 function workoutMinutes(session: WorkoutSession) {

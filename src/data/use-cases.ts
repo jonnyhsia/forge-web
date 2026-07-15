@@ -469,9 +469,30 @@ class LocalDashboardUseCases implements DashboardUseCases {
           .first(),
       ])
 
+      const activePlanIds = plans.map((plan) => plan.id)
+      const planExercises = activePlanIds.length
+        ? await this.database.planExercises
+            .where('planId')
+            .anyOf(activePlanIds)
+            .filter((item) => !item.deletedAt)
+            .toArray()
+        : []
+      const planExerciseCounts = new Map<string, number>()
+      for (const item of planExercises) {
+        planExerciseCounts.set(
+          item.planId,
+          (planExerciseCounts.get(item.planId) ?? 0) + 1,
+        )
+      }
+
       return {
         range,
-        days: deriveDashboardSchedule({ range, plans, sessions }),
+        days: deriveDashboardSchedule({
+          range,
+          plans,
+          sessions,
+          planExerciseCounts,
+        }),
         recentWorkout: recentWorkout ?? null,
         statistics: statistics ?? null,
       }

@@ -21,6 +21,8 @@ import {
   StatePanel,
 } from '../../ui/primitives'
 import { Icon } from '../../ui/Icon'
+import { WeeklyTrainingSummary } from '../dashboard/WeeklyTraining'
+import { useWeeklyDashboard } from '../dashboard/useWeeklyDashboard'
 import {
   createPlanEditor,
   type PlanDraft,
@@ -74,6 +76,7 @@ export function PlansPage() {
   const loadPlans = useForgeStore((state) => state.loadPlans)
   const loadPlan = useForgeStore((state) => state.loadPlan)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const { dashboard } = useWeeklyDashboard()
 
   useEffect(() => {
     if (plans.status === 'idle') void loadPlans({ reset: true })
@@ -93,6 +96,11 @@ export function PlansPage() {
       </header>
 
       <div className="plan-list">
+        <WeeklyTrainingSummary
+          errorMessage={dashboard.error?.message}
+          snapshot={dashboard.value}
+          status={dashboard.status}
+        />
         {plans.status === 'loading' && plans.items.length === 0 ? (
           <StatePanel kind="loading" title="正在加载计划" description="正在读取本地训练计划。" />
         ) : plans.status === 'error' && plans.items.length === 0 ? (
