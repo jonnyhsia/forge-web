@@ -63,6 +63,11 @@ a {
   color: inherit;
 }
 
+number-flow-react {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
 svg {
   display: block;
 }

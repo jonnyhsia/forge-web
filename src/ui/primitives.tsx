@@ -6,8 +6,36 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
 } from 'react'
+import NumberFlow from '@number-flow/react'
 import { Icon, type IconName } from './Icon'
 import './ui.css'
+
+export interface AnimatedNumberProps {
+  value: number
+  className?: string
+  fractionDigits?: number
+  prefix?: string
+  suffix?: string
+}
+
+export function AnimatedNumber({
+  value,
+  className = '',
+  fractionDigits = 0,
+  prefix,
+  suffix,
+}: AnimatedNumberProps) {
+  return (
+    <NumberFlow
+      className={className}
+      format={{ maximumFractionDigits: fractionDigits }}
+      locales="zh-TW"
+      prefix={prefix}
+      suffix={suffix}
+      value={value}
+    />
+  )
+}
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger'

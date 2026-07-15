@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Button, Card, Dialog, Progress, StatePanel } from '../ui/primitives'
+import { AnimatedNumber, Button, Card, Dialog, Progress, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
 import {
@@ -140,7 +140,7 @@ export function DashboardPage() {
 
       <Card className="hero-card dashboard-hero">
         <p className="hero-card__label">本周训练</p>
-        <h2>{completedOccurrences} / {totalOccurrences}</h2>
+        <h2><AnimatedNumber value={completedOccurrences} /> / <AnimatedNumber value={totalOccurrences} /></h2>
         <p>{totalOccurrences === 0 ? '本周暂无训练安排' : `${completedOccurrences} 场已完成，保持节奏。`}</p>
         <Progress label="本周进度" value={totalOccurrences ? completedOccurrences / totalOccurrences * 100 : 0} />
       </Card>
@@ -291,15 +291,16 @@ function RecentWorkoutCard({
     return <StatePanel kind="empty" title="暂无最近训练" description="完成第一场训练后，这里会显示训练摘要。" />
   }
   const sets = session.exercises.reduce((count, exercise) => count + exercise.sets.length, 0)
+  const minutes = workoutMinutes(session)
   return (
     <Card className="recent-workout">
       <header><div><p>最近训练</p><h2>{session.planName}</h2></div><Link to={`/history/${session.id}`}>查看详情</Link></header>
       <p>{formatDateTime(session.endedAt)}</p>
       <div>
-        <span><strong>{sets}</strong><small>完成组数</small></span>
-        <span><strong>{workoutMinutes(session)}</strong><small>训练分钟</small></span>
-        <span><strong>{weeklyCount ?? '—'}</strong><small>本周场次</small></span>
-        <span><strong>{streakDays ?? '—'}</strong><small>连续天数</small></span>
+        <span><strong><AnimatedNumber value={sets} /></strong><small>完成组数</small></span>
+        <span><strong>{typeof minutes === 'number' ? <AnimatedNumber value={minutes} /> : '—'}</strong><small>训练分钟</small></span>
+        <span><strong>{weeklyCount === undefined ? '—' : <AnimatedNumber value={weeklyCount} />}</strong><small>本周场次</small></span>
+        <span><strong>{streakDays === undefined ? '—' : <AnimatedNumber value={streakDays} />}</strong><small>连续天数</small></span>
       </div>
     </Card>
   )
@@ -452,7 +453,7 @@ function StatisticsContent({ cache, stale }: { cache: StatisticsCache; stale: bo
             <div aria-label="近 8 周训练次数" className="statistics-chart">
               {summary.weeklyTrend.map((item) => (
                 <div className="statistics-chart__week" key={item.weekStart}>
-                  <span className="statistics-chart__count">{item.workoutCount}</span>
+                  <AnimatedNumber className="statistics-chart__count" value={item.workoutCount} />
                   <span className="statistics-chart__bar" style={{ height: `${item.workoutCount / maxTrend * 100}%` }} />
                   <small>{formatWeek(item.weekStart)}</small>
                 </div>
@@ -466,13 +467,13 @@ function StatisticsContent({ cache, stale }: { cache: StatisticsCache; stale: bo
             ) : summary.personalRecords.map((record) => (
               <div className="statistics-pr" key={record.exerciseId}>
                 <strong>{record.exerciseName}</strong>
-                <span><b>{formatNumber(record.weightKg)} kg</b><small>{formatDate(record.achievedAt)}</small></span>
+                <span><b><AnimatedNumber value={record.weightKg} fractionDigits={2} suffix=" kg" /></b><small>{formatDate(record.achievedAt)}</small></span>
               </div>
             ))}
           </Card>
           <Card className="statistics-volume">
             <p className="statistics-label">本月总训练量</p>
-            <strong>{formatNumber(summary.trainingVolumeKg)}</strong>
+            <strong><AnimatedNumber value={summary.trainingVolumeKg} fractionDigits={2} /></strong>
             <span>kg</span>
           </Card>
         </>
@@ -482,7 +483,7 @@ function StatisticsContent({ cache, stale }: { cache: StatisticsCache; stale: bo
 }
 
 function StatisticMetric({ label, value, unit }: { label: string; value: number; unit: string }) {
-  return <Card className="statistics-metric"><span>{label}</span><strong>{value}</strong><small>{unit}</small></Card>
+  return <Card className="statistics-metric"><span>{label}</span><strong><AnimatedNumber value={value} /></strong><small>{unit}</small></Card>
 }
 
 export function SettingsPage() {
@@ -812,10 +813,6 @@ function formatDate(value: string) {
 function formatWeek(localDate: string) {
   const [, month, day] = localDate.split('-')
   return `${Number(month)}/${Number(day)}`
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 2 }).format(value)
 }
 
 function isLocalDate(value: string | null): value is string {
