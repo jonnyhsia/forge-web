@@ -121,6 +121,84 @@ export function Dialog({ open, title, children, actions, onClose }: DialogProps)
   )
 }
 
+export interface AlertProps {
+  open: boolean
+  title: string
+  description: string
+  confirmLabel?: string
+  cancelLabel?: string
+  confirmVariant?: ButtonProps['variant']
+  pending?: boolean
+  onConfirm: () => void
+  onClose: () => void
+}
+
+export function Alert({
+  open,
+  title,
+  description,
+  confirmLabel = '确定',
+  cancelLabel,
+  confirmVariant = 'primary',
+  pending = false,
+  onConfirm,
+  onClose,
+}: AlertProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+  const alertRef = useRef<HTMLElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    if (!open) return
+
+    const previousFocus = document.activeElement
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !pending) onCloseRef.current()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    alertRef.current?.focus()
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (previousFocus instanceof HTMLElement) previousFocus.focus()
+    }
+  }, [open, pending])
+
+  if (!open) return null
+  return (
+    <div className="ui-alert-backdrop" onMouseDown={() => { if (!pending) onClose() }}>
+      <section
+        aria-describedby={descriptionId}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="ui-alert"
+        onMouseDown={(event) => event.stopPropagation()}
+        ref={alertRef}
+        role="alertdialog"
+        tabIndex={-1}
+      >
+        <div className="ui-alert__content">
+          <h2 id={titleId}>{title}</h2>
+          <p id={descriptionId}>{description}</p>
+        </div>
+        <footer className="ui-alert__actions">
+          {cancelLabel ? (
+            <Button disabled={pending} fullWidth onClick={onClose} variant="secondary">
+              {cancelLabel}
+            </Button>
+          ) : null}
+          <Button disabled={pending} fullWidth onClick={onConfirm} variant={confirmVariant}>
+            {confirmLabel}
+          </Button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 export function Progress({ value, label }: { value: number; label?: string }) {
   const normalized = Math.min(100, Math.max(0, value))
   return (

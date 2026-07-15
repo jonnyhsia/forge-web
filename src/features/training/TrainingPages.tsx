@@ -11,7 +11,7 @@ import type { WeightValue } from '../../domain'
 import { useForgeStore } from '../../store'
 import { browserReminderService } from '../../notifications'
 import { Icon } from '../../ui/Icon'
-import { Button, Card, Dialog, Progress, StatePanel } from '../../ui/primitives'
+import { Alert, Button, Card, Dialog, Progress, StatePanel } from '../../ui/primitives'
 import {
   createTrainingUiAdapter,
   type DurationSetInput,
@@ -288,15 +288,15 @@ function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { a
   const [current, setCurrent] = useState(view)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const systemReminderEnabled = useForgeStore((state) => state.settings.value?.trainingReminderEnabled ?? false)
   const reminderMessage = useTimerTargetReminder(current, systemReminderEnabled)
   useEffect(() => {
     const interval = window.setInterval(() => setCurrent((previous) => adapter.refreshTimer(previous) as DurationTrainingView), 250)
     return () => window.clearInterval(interval)
   }, [adapter])
-  const complete = async () => {
+  const saveCurrentSet = async () => {
     if (current.elapsedSeconds <= 0) return
-    if (!current.targetReached && !window.confirm('提前结束并记录当前实际时长？')) return
     setPending(true)
     setError(null)
     try {
@@ -307,12 +307,34 @@ function DurationWorkout({ adapter, view, onChange, onResume, resumeError }: { a
       setPending(false)
     }
   }
+  const complete = () => {
+    if (current.elapsedSeconds <= 0) return
+    if (!current.targetReached) {
+      setConfirmOpen(true)
+      return
+    }
+    void saveCurrentSet()
+  }
   return (
-    <TimerWorkoutShell current={current} label="实际时长" reminderMessage={reminderMessage}>
-      <Button disabled={pending || current.elapsedSeconds <= 0} fullWidth onClick={() => void complete()}>{pending ? '正在保存…' : current.targetReached ? '完成本组' : '提前结束并记录'}</Button>
-      {error ? <p className="training-submit-error" role="alert">保存失败，请重试。{error}</p> : null}
-      {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
-    </TimerWorkoutShell>
+    <>
+      <TimerWorkoutShell current={current} label="实际时长" reminderMessage={reminderMessage}>
+        <Button disabled={pending || current.elapsedSeconds <= 0} fullWidth onClick={complete}>{pending ? '正在保存…' : current.targetReached ? '完成本组' : '提前结束并记录'}</Button>
+        {error ? <p className="training-submit-error" role="alert">保存失败，请重试。{error}</p> : null}
+        {current.sessionStatus === 'paused' ? <PausedOverlay error={resumeError} onResume={onResume} /> : null}
+      </TimerWorkoutShell>
+      <Alert
+        cancelLabel="取消"
+        confirmLabel="确认记录"
+        description="当前尚未达到目标时长，是否提前结束并记录当前实际时长？"
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false)
+          void saveCurrentSet()
+        }}
+        open={confirmOpen}
+        title="提前结束本组？"
+      />
+    </>
   )
 }
 
@@ -576,6 +598,7 @@ function NumberControl({
 function UnavailableWorkout({ adapter, onChange, view }: { adapter: TrainingUiAdapter; onChange: (view: TrainingView) => void; view: UnavailableTrainingView }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const content =
     view.reason === 'duration'
       ? {
@@ -593,32 +616,41 @@ function UnavailableWorkout({ adapter, onChange, view }: { adapter: TrainingUiAd
           }
 
   return (
-    <main className="training-content training-content--state">
-      <StatePanel
-        action={
-          view.reason === 'finished' ? (
-            <Button
-              disabled={pending}
-              onClick={() => {
-                if (!window.confirm('确认完成本次训练并保存记录？')) return
-                setPending(true)
-                setError(null)
-                void adapter
-                  .completeTraining(view)
-                  .then(onChange)
-                  .catch((cause: unknown) => setError(toDataError(cause).message))
-                  .finally(() => setPending(false))
-              }}
-            >
-              {pending ? '正在保存…' : '完成训练'}
-            </Button>
-          ) : undefined
-        }
-        description={error ? `${content.description} ${error}` : content.description}
-        kind={error ? 'error' : 'empty'}
-        title={content.title}
+    <>
+      <main className="training-content training-content--state">
+        <StatePanel
+          action={
+            view.reason === 'finished' ? (
+              <Button disabled={pending} onClick={() => setConfirmOpen(true)}>
+                {pending ? '正在保存…' : '完成训练'}
+              </Button>
+            ) : undefined
+          }
+          description={error ? `${content.description} ${error}` : content.description}
+          kind={error ? 'error' : 'empty'}
+          title={content.title}
+        />
+      </main>
+      <Alert
+        cancelLabel="取消"
+        confirmLabel="确认完成"
+        description="完成后将保存本次训练记录并生成训练总结。"
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={() => {
+          setConfirmOpen(false)
+          setPending(true)
+          setError(null)
+          void adapter
+            .completeTraining(view)
+            .then(onChange)
+            .catch((cause: unknown) => setError(toDataError(cause).message))
+            .finally(() => setPending(false))
+        }}
+        open={confirmOpen}
+        pending={pending}
+        title="确认完成训练？"
       />
-    </main>
+    </>
   )
 }
 

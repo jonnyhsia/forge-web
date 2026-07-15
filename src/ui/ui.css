@@ -47,6 +47,13 @@
 .ui-dialog__body { padding: var(--space-5); }
 .ui-dialog__actions { display: flex; gap: var(--space-3); padding: var(--space-4) var(--space-5) max(var(--space-5), env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border); }
 
+.ui-alert-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: max(var(--space-5), env(safe-area-inset-top)) max(var(--space-5), env(safe-area-inset-right)) max(var(--space-5), env(safe-area-inset-bottom)) max(var(--space-5), env(safe-area-inset-left)); background: rgb(0 0 0 / 68%); }
+.ui-alert { width: min(100%, 26rem); overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-surface); box-shadow: 0 24px 80px rgb(0 0 0 / 45%); }
+.ui-alert__content { display: grid; gap: var(--space-3); padding: var(--space-6) var(--space-5) var(--space-5); text-align: center; }
+.ui-alert__content h2 { margin: 0; font-size: var(--text-lg); }
+.ui-alert__content p { margin: 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.6; }
+.ui-alert__actions { display: flex; gap: var(--space-3); padding: var(--space-4) var(--space-5) var(--space-5); border-top: 1px solid var(--color-border); }
+
 .ui-progress { display: grid; gap: var(--space-2); }
 .ui-progress__label { display: flex; justify-content: space-between; color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
 .ui-progress__track { height: .375rem; overflow: hidden; border-radius: var(--radius-round); background: rgb(255 255 255 / 6%); }
