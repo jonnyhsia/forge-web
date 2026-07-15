@@ -79,6 +79,24 @@ svg {
   overflow: hidden;
 }
 
+.top-fading-edge {
+  --top-fading-edge-size: var(--space-6);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--top-fading-edge-size)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--top-fading-edge-size)
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
 ::selection {
   background: var(--color-accent);
   color: var(--color-on-accent);

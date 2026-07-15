@@ -61,6 +61,7 @@ export interface DurationTarget {
   type: 'duration'
   targetSeconds: number
   targetSets: number
+  weight?: WeightValue
 }
 
 export type ExerciseTarget = RepetitionTarget | DurationTarget

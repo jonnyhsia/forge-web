@@ -86,6 +86,7 @@ describe('计划编辑模块', () => {
     )
     expect(result.exercises['duration-1']).toEqual({
       targetSeconds: '时长必须是 1–86400 秒的整数',
+      weightValue: '重量必须大于 0，且最多三位小数',
     })
   })
 
@@ -135,7 +136,7 @@ describe('计划编辑模块', () => {
           exercise: { name: '跳绳', type: 'duration' },
           planExercise: {
             position: 0,
-            target: { type: 'duration', targetSeconds: 600, targetSets: 3 },
+            target: { type: 'duration', targetSeconds: 600, targetSets: 3, weight: { mode: 'bodyweight' } },
           },
         },
         {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { AnimatedNumber, Button, Card, Dialog, Progress, StatePanel } from '../ui/primitives'
+import { AnimatedNumber, Button, Card, Dialog, Progress, SegmentedControl, StatePanel } from '../ui/primitives'
 import { Icon } from '../ui/Icon'
 import { useForgeStore } from '../store'
 import {
@@ -22,6 +22,11 @@ import './shell-pages.css'
 import './dashboard.css'
 import './sync.css'
 
+const WEIGHT_UNIT_OPTIONS = [
+  { value: 'kg', label: 'kg' },
+  { value: 'lb', label: 'lbs' },
+] as const
+
 function Page({ eyebrow, title, action, fixedContent, children }: { eyebrow?: string; title: string; action?: ReactNode; fixedContent?: ReactNode; children: ReactNode }) {
   return (
     <div className="page">
@@ -33,7 +38,7 @@ function Page({ eyebrow, title, action, fixedContent, children }: { eyebrow?: st
         {action}
       </header>
       {fixedContent ? <div className="page-fixed">{fixedContent}</div> : null}
-      <div className="page-body">{children}</div>
+      <div className="page-body top-fading-edge">{children}</div>
     </div>
   )
 }
@@ -600,19 +605,7 @@ export function SettingsPage() {
         <Card className="settings-list">
           <div className="settings-row">
             <div><strong>默认重量单位</strong><small>仅影响新建目标与编辑控件，不改写历史记录。</small></div>
-            <div aria-label="默认重量单位" className="settings-unit" role="group">
-              {(['kg', 'lb'] as const).map((unit) => (
-                <button
-                  aria-pressed={value.defaultWeightUnit === unit}
-                  disabled={pending !== null}
-                  key={unit}
-                  onClick={() => void save('defaultWeightUnit', { defaultWeightUnit: unit })}
-                  type="button"
-                >
-                  {unit === 'lb' ? 'lbs' : 'kg'}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl disabled={pending !== null} label="默认重量单位" labelVisible={false} onChange={(defaultWeightUnit) => void save('defaultWeightUnit', { defaultWeightUnit })} options={WEIGHT_UNIT_OPTIONS} size="compact" value={value.defaultWeightUnit} />
           </div>
           <ReminderToggle
             checked={value.trainingReminderEnabled}

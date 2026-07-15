@@ -7,6 +7,7 @@ export type IconName =
   | 'chevron-right'
   | 'cloud-off'
   | 'home'
+  | 'minus'
   | 'plans'
   | 'plus'
   | 'records'
@@ -26,6 +27,7 @@ const paths: Record<IconName, React.ReactNode> = {
   'chevron-right': <path d="m9 18 6-6-6-6" />,
   'cloud-off': <><path d="m2 2 20 20" /><path d="M5.8 5.8A7 7 0 0 0 5 19h11.2" /><path d="M9.3 3.7A7 7 0 0 1 19 10.6 4.5 4.5 0 0 1 20.5 19" /></>,
   home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
+  minus: <path d="M5 12h14" />,
   plans: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></>,
   plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
   records: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19V3" /></>,

@@ -3,6 +3,7 @@ import type {
   PlanCategory,
   PlanStatus,
   Weekday,
+  WeightValue,
   WeightUnit,
 } from '../../domain'
 import type { PlanAggregate } from '../../data'
@@ -92,15 +93,15 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
               weightMode:
                 target.type === 'repetitions'
                   ? target.weight.mode
-                  : 'external',
+                  : (target.weight?.mode ?? 'bodyweight'),
               weightValue:
                 target.type === 'repetitions'
                   ? (target.weight.value ?? null)
-                  : null,
+                  : (target.weight?.value ?? null),
               weightUnit:
                 target.type === 'repetitions'
                   ? (target.weight.unit ?? options.defaultWeightUnit)
-                  : options.defaultWeightUnit,
+                  : (target.weight?.unit ?? options.defaultWeightUnit),
               restSeconds: planExercise.restSeconds ?? 0,
             }
           },
@@ -183,31 +184,32 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
           const original = options.aggregate?.exercises.find(
             ({ exercise }) => exercise.id === item.id,
           )
+          const weight: WeightValue = item.weightMode === 'external'
+            ? {
+                mode: 'external',
+                value: item.weightValue!,
+                unit: item.weightUnit,
+              }
+            : item.weightValue === null
+              ? { mode: 'bodyweight' }
+              : {
+                  mode: 'bodyweight',
+                  value: item.weightValue,
+                  unit: item.weightUnit,
+                }
           const target: ExerciseTarget =
             item.type === 'duration'
               ? {
                   type: 'duration',
                   targetSets: item.targetSets,
                   targetSeconds: item.targetSeconds,
+                  weight,
                 }
               : {
                   type: 'repetitions',
                   targetSets: item.targetSets,
                   targetRepetitions: item.targetRepetitions,
-                  weight:
-                    item.weightMode === 'external'
-                      ? {
-                          mode: 'external',
-                          value: item.weightValue!,
-                          unit: item.weightUnit,
-                        }
-                      : item.weightValue === null
-                        ? { mode: 'bodyweight' }
-                        : {
-                            mode: 'bodyweight',
-                            value: item.weightValue,
-                            unit: item.weightUnit,
-                          },
+                  weight,
                 }
 
           return {
@@ -268,16 +270,16 @@ export function createPlanEditor(options: PlanEditorOptions): PlanEditor {
           if (!isIntegerBetween(exercise.targetRepetitions, 1, 999)) {
             errors.targetRepetitions = '次数必须是 1–999 的整数'
           }
-          if (
-            !isValidWeight(
-              exercise.weightValue,
-              exercise.weightMode === 'external',
-            )
-          ) {
-            errors.weightValue = '重量必须大于 0，且最多三位小数'
-          }
         } else if (!isIntegerBetween(exercise.targetSeconds, 1, 86_400)) {
           errors.targetSeconds = '时长必须是 1–86400 秒的整数'
+        }
+        if (
+          !isValidWeight(
+            exercise.weightValue,
+            exercise.weightMode === 'external',
+          )
+        ) {
+          errors.weightValue = '重量必须大于 0，且最多三位小数'
         }
         if (Object.keys(errors).length > 0) exercises[exercise.id] = errors
       }

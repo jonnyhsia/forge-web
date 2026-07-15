@@ -10,7 +10,16 @@ import type { PlanAggregate } from '../../data'
 import type { DataError } from '../../data'
 import type { Weekday } from '../../domain'
 import { useForgeStore } from '../../store'
-import { Button, Card, Dialog, Field, StatePanel } from '../../ui/primitives'
+import {
+  AnimatedNumber,
+  Button,
+  Card,
+  Dialog,
+  Field,
+  NumberStepper,
+  SegmentedControl,
+  StatePanel,
+} from '../../ui/primitives'
 import { Icon } from '../../ui/Icon'
 import {
   createPlanEditor,
@@ -36,6 +45,11 @@ const CATEGORY_LABELS = {
   cardio: '有氧训练',
   mobility: '拉伸放松',
 } as const
+
+const EXERCISE_TYPES: ReadonlyArray<{ value: PlanExerciseDraft['type']; label: string }> = [
+  { value: 'repetitions', label: '次数型' },
+  { value: 'duration', label: '时间型' },
+]
 
 function dataErrorMessage(error: DataError | null) {
   if (!error) return ''
@@ -148,7 +162,10 @@ export function PlanDetailPage() {
 }
 
 function targetSummary(target: PlanAggregate['exercises'][number]['planExercise']['target']) {
-  if (target.type === 'duration') return `${target.targetSets} 组 × ${target.targetSeconds} 秒`
+  if (target.type === 'duration') {
+    const weight = target.weight?.mode === 'external' ? `${target.weight.value} ${target.weight.unit}` : target.weight?.value ? `自重 + ${target.weight.value} ${target.weight.unit}` : '自重'
+    return `${target.targetSets} 组 × ${target.targetSeconds} 秒 · ${weight}`
+  }
   const weight = target.weight.mode === 'external' ? `${target.weight.value} ${target.weight.unit}` : target.weight.value ? `自重 + ${target.weight.value} ${target.weight.unit}` : '自重'
   return `${target.targetSets} 组 × ${target.targetRepetitions} 次 · ${weight}`
 }
@@ -169,6 +186,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   const [draft, setDraft] = useState(editor.initial)
   const [validation, setValidation] = useState<PlanValidation>({ valid: true, fields: {}, exercises: {} })
   const [editingExercise, setEditingExercise] = useState<PlanExerciseDraft | null>(null)
+  const [exerciseDialogOpen, setExerciseDialogOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -184,7 +202,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     if (blocker.state !== 'blocked' || (!editingExercise && !deleteOpen)) return
     // Router navigation is external state; Back closes the topmost dialog first.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEditingExercise(null)
+    setExerciseDialogOpen(false)
     setDeleteOpen(false)
     blocker.reset()
   }, [blocker, deleteOpen, editingExercise])
@@ -253,13 +271,18 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
         ? current.exercises.map((item) => item.id === exercise.id ? exercise : item)
         : [...current.exercises, exercise],
     }))
-    setEditingExercise(null)
+    setExerciseDialogOpen(false)
     return null
   }
 
   const removeExercise = (exerciseId: string) => {
     setDraft((current) => ({ ...current, exercises: current.exercises.filter((item) => item.id !== exerciseId) }))
-    setEditingExercise(null)
+    setExerciseDialogOpen(false)
+  }
+
+  const editExercise = (exercise: PlanExerciseDraft) => {
+    setEditingExercise(exercise)
+    setExerciseDialogOpen(true)
   }
 
   const dropExercise = (targetId: string) => {
@@ -298,7 +321,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
         {aggregate ? <span className="plan-status-badge">{aggregate.plan.status === 'draft' ? '草稿' : syncLabel(aggregate.plan.sync.status)}</span> : null}
       </header>
 
-      <div className="plan-editor-body">
+      <div className="plan-editor-body top-fading-edge">
         <section className="plan-editor-section">
           <Field error={validation.fields.name} label="计划名称" maxLength={80} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
           <div className="plan-grid">
@@ -319,13 +342,13 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
         </section>
 
         <section className="plan-editor-section">
-          <div className="plan-section-heading"><div><p>EXERCISES</p><h2>训练动作</h2></div>{draft.exercises.length > 0 ? <Button leadingIcon="plus" variant="secondary" onClick={() => setEditingExercise(editor.createExercise())}>添加动作</Button> : null}</div>
+          <div className="plan-section-heading"><div><p>EXERCISES</p><h2>训练动作</h2></div>{draft.exercises.length > 0 ? <Button leadingIcon="plus" variant="secondary" onClick={() => editExercise(editor.createExercise())}>添加动作</Button> : null}</div>
           {validation.fields.exercises ? <p className="plan-field-error">{validation.fields.exercises}</p> : null}
-          {draft.exercises.length === 0 ? <button className="exercise-empty" onClick={() => setEditingExercise(editor.createExercise())}><Icon name="plus" size={20} /><span>尚未添加动作<small>点击添加</small></span></button> : (
+          {draft.exercises.length === 0 ? <button className="exercise-empty" onClick={() => editExercise(editor.createExercise())}><Icon name="plus" size={20} /><span>尚未添加动作<small>点击添加</small></span></button> : (
             <div className="exercise-list">{draft.exercises.map((exercise, index) => (
               <div className="exercise-row" draggable key={exercise.id} onDragStart={() => setDraggingId(exercise.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropExercise(exercise.id)}>
                 <span aria-hidden="true" className="drag-handle">⋮⋮</span>
-                <button className="exercise-row__main" onClick={() => setEditingExercise(exercise)}><strong>{exercise.name}</strong><small>{exerciseDraftSummary(exercise)}</small></button>
+                <button className="exercise-row__main" onClick={() => editExercise(exercise)}><strong>{exercise.name}</strong><small>{exerciseDraftSummary(exercise)}</small></button>
                 <div className="exercise-row__moves"><button aria-label={`上移 ${exercise.name}`} disabled={index === 0} onClick={() => setDraft(editor.moveExercise(draft, exercise.id, 'up'))}>↑</button><button aria-label={`下移 ${exercise.name}`} disabled={index === draft.exercises.length - 1} onClick={() => setDraft(editor.moveExercise(draft, exercise.id, 'down'))}>↓</button></div>
               </div>
             ))}</div>
@@ -340,7 +363,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
         <Button disabled={submitting} fullWidth onClick={() => void saveAndClose()}>{submitting ? '保存中…' : '保存计划'}</Button>
       </footer>
 
-      {editingExercise ? <ExerciseDialog exercise={editingExercise} onClose={() => setEditingExercise(null)} onDelete={() => removeExercise(editingExercise.id)} onSave={saveExercise} /> : null}
+      {editingExercise ? <ExerciseDialog exercise={editingExercise} onAfterClose={() => setEditingExercise(null)} onClose={() => setExerciseDialogOpen(false)} onDelete={() => removeExercise(editingExercise.id)} onSave={saveExercise} open={exerciseDialogOpen} /> : null}
       <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => setDeleteOpen(false)}>取消</Button><Button fullWidth variant="danger" disabled={submitting} onClick={() => void confirmDelete()}>确认删除</Button></>} onClose={() => setDeleteOpen(false)} open={deleteOpen} title="删除训练计划"><p>删除后计划将从列表隐藏，并在联网后同步删除。此操作无法撤销。</p></Dialog>
       <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => blocker.reset?.()}>继续编辑</Button><Button fullWidth variant="ghost" onClick={() => { allowNavigation.current = true; blocker.proceed?.() }}>丢弃修改</Button></>} onClose={() => blocker.reset?.()} open={blocker.state === 'blocked' && !editingExercise && !deleteOpen} title="放弃未提交的修改？"><p>{submitError || '离开页面将丢弃未保存的修改。'}</p></Dialog>
     </div>
@@ -348,30 +371,74 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
 }
 
 function exerciseDraftSummary(exercise: PlanExerciseDraft) {
-  if (exercise.type === 'duration') return `${exercise.targetSets} 组 × ${exercise.targetSeconds} 秒`
   const weight = exercise.weightMode === 'external' ? `${exercise.weightValue ?? '—'} ${exercise.weightUnit}` : exercise.weightValue ? `自重 + ${exercise.weightValue} ${exercise.weightUnit}` : '自重'
+  if (exercise.type === 'duration') return `${exercise.targetSets} 组 × ${exercise.targetSeconds} 秒 · ${weight}`
   return `${exercise.targetSets} 组 × ${exercise.targetRepetitions} 次 · ${weight}`
 }
 
-function ExerciseDialog({ exercise, onSave, onDelete, onClose }: { exercise: PlanExerciseDraft; onSave: (exercise: PlanExerciseDraft) => Record<string, string> | null; onDelete: () => void; onClose: () => void }) {
+function durationValue(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return <><AnimatedNumber value={minutes} /><span aria-hidden="true">:</span><AnimatedNumber prefix={remainder < 10 ? '0' : undefined} value={remainder} /></>
+}
+
+function renderWeightValue(value: number) {
+  return (
+    <span className="exercise-weight-value" data-bodyweight={value === 0}>
+      <AnimatedNumber className="exercise-weight-value__number" fractionDigits={3} value={value} />
+      <span aria-hidden="true" className="exercise-weight-value__bodyweight">自重</span>
+    </span>
+  )
+}
+
+function ExerciseSetting({
+  label,
+  hint,
+  error,
+  hidden = false,
+  children,
+}: {
+  label: string
+  hint: string
+  error?: string
+  hidden?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div className="exercise-setting" hidden={hidden}>
+      <span><strong>{label}</strong><small>{hint}</small>{error ? <em role="alert">{error}</em> : null}</span>
+      {children}
+    </div>
+  )
+}
+
+function ExerciseDialog({ exercise, open, onSave, onDelete, onClose, onAfterClose }: { exercise: PlanExerciseDraft; open: boolean; onSave: (exercise: PlanExerciseDraft) => Record<string, string> | null; onDelete: () => void; onClose: () => void; onAfterClose: () => void }) {
   const [draft, setDraft] = useState(exercise)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const save = () => {
     const result = onSave(draft)
     if (result) setErrors(result)
   }
+  const weightValue = draft.weightValue ?? 0
+  const updateWeight = (value: number) => setDraft({
+    ...draft,
+    weightMode: value === 0 ? 'bodyweight' : draft.weightMode,
+    weightValue: value === 0 ? null : value,
+  })
   return (
-    <Dialog actions={<>{exercise.name ? <Button variant="danger" onClick={onDelete}>删除</Button> : null}<Button fullWidth onClick={save}>保存动作</Button></>} onClose={onClose} open title={exercise.name ? '编辑动作' : '添加动作'}>
+    <Dialog className="exercise-dialog" actions={<>{exercise.name.trim() ? <Button variant="danger" onClick={onDelete}>删除</Button> : null}<Button disabled={!draft.name.trim()} fullWidth onClick={save}>保存动作</Button></>} onAfterClose={onAfterClose} onClose={onClose} open={open} title={exercise.name ? '编辑动作' : '添加动作'}>
       <div className="exercise-form">
-        <Field error={errors.name} label="动作名称" maxLength={80} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
-        <label>动作类型<select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value as PlanExerciseDraft['type'] })}><option value="repetitions">次数型</option><option value="duration">时间型</option></select></label>
-        <Field error={errors.targetSets} label="目标组数" min={1} max={99} type="number" value={draft.targetSets} onChange={(event) => setDraft({ ...draft, targetSets: Number(event.target.value) })} />
-        {draft.type === 'repetitions' ? <>
-          <Field error={errors.targetRepetitions} label="每组次数" min={1} max={999} type="number" value={draft.targetRepetitions} onChange={(event) => setDraft({ ...draft, targetRepetitions: Number(event.target.value) })} />
-          <label>重量模式<select value={draft.weightMode} onChange={(event) => setDraft({ ...draft, weightMode: event.target.value as PlanExerciseDraft['weightMode'], weightValue: null })}><option value="external">外加重量</option><option value="bodyweight">自重</option></select></label>
-          {draft.weightMode === 'external' ? <div className="plan-grid"><Field error={errors.weightValue} label="目标重量" min="0" step="0.001" type="number" value={draft.weightValue ?? ''} onChange={(event) => setDraft({ ...draft, weightValue: event.target.value === '' ? null : Number(event.target.value) })} /><label>单位<select value={draft.weightUnit} onChange={(event) => setDraft({ ...draft, weightUnit: event.target.value as 'kg' | 'lb' })}><option value="kg">kg</option><option value="lb">lb</option></select></label></div> : null}
-        </> : <Field error={errors.targetSeconds} label="每组时长（秒）" min={1} max={86400} step={30} type="number" value={draft.targetSeconds} onChange={(event) => setDraft({ ...draft, targetSeconds: Number(event.target.value) })} />}
-        <Field error={errors.restSeconds} label="组间休息（秒）" min={0} max={3600} step={30} type="number" value={draft.restSeconds} onChange={(event) => setDraft({ ...draft, restSeconds: Number(event.target.value) })} />
+        <Field error={errors.name} label="动作名称" maxLength={80} placeholder="如：卧推、深蹲、跳绳…" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        <SegmentedControl label="动作类型" onChange={(type) => setDraft({ ...draft, type })} options={EXERCISE_TYPES} value={draft.type} />
+        <div className="exercise-settings">
+          <ExerciseSetting error={errors.targetSets} hint="共几组" label="重复组数"><NumberStepper label="重复组数" max={99} min={1} onChange={(targetSets) => setDraft({ ...draft, targetSets })} value={draft.targetSets} /></ExerciseSetting>
+          <ExerciseSetting error={errors.targetRepetitions} hidden={draft.type !== 'repetitions'} hint="目标重复次数" label="每组次数"><NumberStepper label="每组次数" max={999} min={1} onChange={(targetRepetitions) => setDraft({ ...draft, targetRepetitions })} value={draft.targetRepetitions} /></ExerciseSetting>
+          <ExerciseSetting error={errors.targetSeconds} hidden={draft.type !== 'duration'} hint="每组持续时长" label="每组时长"><NumberStepper className="exercise-duration-stepper" label="每组时长" max={86400} min={30} onChange={(targetSeconds) => setDraft({ ...draft, targetSeconds })} renderValue={durationValue} step={30} value={draft.targetSeconds} /></ExerciseSetting>
+          <ExerciseSetting error={errors.weightValue} hint={`${draft.weightUnit}，0 = 自重`} label="目标重量"><NumberStepper className="exercise-weight-stepper" fractionDigits={3} label="目标重量" max={9999} min={0} onChange={updateWeight} renderValue={renderWeightValue} step={2.5} value={weightValue} /></ExerciseSetting>
+        </div>
+        <div className="exercise-settings exercise-settings--rest">
+          <ExerciseSetting error={errors.restSeconds} hint="每组完成后休息时长" label="组间休息"><NumberStepper className="exercise-duration-stepper" label="组间休息" max={3600} min={0} onChange={(restSeconds) => setDraft({ ...draft, restSeconds })} renderValue={durationValue} step={10} value={draft.restSeconds} /></ExerciseSetting>
+        </div>
       </div>
     </Dialog>
   )
