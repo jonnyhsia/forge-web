@@ -259,7 +259,7 @@ export function createTrainingUiAdapter(options: TrainingUiAdapterOptions): Trai
     return options.gateway.saveTimer(sessionId, timer)
   }
 
-  const openSession = async (session: WorkoutSession): Promise<TrainingView> => {
+  const ensureDurationTimer = async (session: WorkoutSession): Promise<WorkoutSession> => {
     if (
       (session.status === 'active' || session.status === 'paused') &&
       !session.timer &&
@@ -267,16 +267,25 @@ export function createTrainingUiAdapter(options: TrainingUiAdapterOptions): Trai
     ) {
       const exercise = session.exercises.find((item) => item.id === session.activeExerciseResultId)
       if (exercise?.target.type === 'duration' && session.activeSetNumber !== undefined) {
-        const timer = timerController.start({
+        const timestamp = now()
+        const startedTimer = timerController.start({
           phase: 'exercise',
           exerciseResultId: exercise.id,
           setNumber: session.activeSetNumber,
           targetSeconds: exercise.target.targetSeconds,
-          startedAt: now(),
+          startedAt: timestamp,
         })
+        const timer = session.status === 'paused'
+          ? timerController.pause(startedTimer, timestamp)
+          : startedTimer
         session = await saveTimer(session.id, timer)
       }
     }
+    return session
+  }
+
+  const openSession = async (session: WorkoutSession): Promise<TrainingView> => {
+    session = await ensureDurationTimer(session)
     return toTrainingView(session, now())
   }
 
@@ -305,14 +314,19 @@ export function createTrainingUiAdapter(options: TrainingUiAdapterOptions): Trai
         ? { skipped: false as const, durationSeconds: (attempt.input as DurationSetInput).durationSeconds ?? timerController.finish(view.timer, now()) }
         : { skipped: false as const, repetitions: (attempt.input as RepetitionSetInput).repetitions, weight: (attempt.input as RepetitionSetInput).weight }
       const completion = options.gateway.completeSet({ sessionId: view.sessionId, exerciseResultId: view.exerciseResultId, setNumber: view.activeSetNumber, result }, attempt.idempotencyKey)
-        .then(({ session }) => { attempts.delete(target); return toTrainingView(session, now()) })
+        .then(async ({ session }) => {
+          const nextSession = await ensureDurationTimer(session)
+          attempts.delete(target)
+          return toTrainingView(nextSession, now())
+        })
         .finally(() => pending.delete(target))
       pending.set(target, completion)
       return completion
     },
 
     async finishRest(view) {
-      return toTrainingView(await saveTimer(view.sessionId, undefined), now())
+      const session = await saveTimer(view.sessionId, undefined)
+      return toTrainingView(await ensureDurationTimer(session), now())
     },
 
     async completeTraining(view) {

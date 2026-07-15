@@ -222,7 +222,7 @@ describe('时间型与休息训练 UI adapter', () => {
     }
   }
 
-  it('刷新时按持久化绝对时间恢复时间型动作，并在提前结束后进入休息计时', async () => {
+  it('刷新时按持久化绝对时间恢复时间型动作，并在休息结束后创建下一组计时器', async () => {
     const session = durationSession()
     let persisted = session
     const adapter = createTrainingUiAdapter({
@@ -266,5 +266,88 @@ describe('时间型与休息训练 UI adapter', () => {
 
     const rest = await adapter.completeCurrentSet(view, { durationSeconds: 8 })
     expect(rest).toMatchObject({ kind: 'rest', targetSeconds: 5, elapsedSeconds: 0 })
+    if (rest.kind !== 'rest') throw new Error('Expected rest view')
+
+    const nextSet = await adapter.finishRest(rest)
+    expect(nextSet).toMatchObject({
+      kind: 'duration',
+      activeSetNumber: 2,
+      elapsedSeconds: 0,
+      targetSeconds: 10,
+      timer: {
+        phase: 'exercise',
+        exerciseResultId: 'result-1',
+        setNumber: 2,
+        status: 'running',
+      },
+    })
+  })
+
+  it('完成次数型动作后为下一个时间型动作创建计时器', async () => {
+    const repetitions = repetitionSession()
+    const durationExercise = {
+      ...durationSession().exercises[0]!,
+      id: 'result-duration',
+      position: 1,
+    }
+    const session = repetitionSession({
+      activeSetNumber: 1,
+      exercises: [
+        {
+          ...repetitions.exercises[0]!,
+          target: {
+            ...repetitions.exercises[0]!.target,
+            targetSets: 1,
+          },
+          sets: [],
+        },
+        durationExercise,
+      ],
+    })
+    let persisted = session
+    const saveTimer = vi.fn().mockImplementation(async (_id, timer) => {
+      persisted = { ...persisted, timer }
+      return persisted
+    })
+    const adapter = createTrainingUiAdapter({
+      createId: () => 'set-id',
+      now: () => '2026-07-14T08:00:10.000Z',
+      gateway: {
+        start: vi.fn(),
+        get: vi.fn().mockResolvedValue(session),
+        transition: vi.fn(),
+        completeSet: vi.fn().mockImplementation(async () => {
+          persisted = {
+            ...persisted,
+            activeExerciseResultId: 'result-duration',
+            activeSetNumber: 1,
+            timer: undefined,
+          }
+          return { session: persisted, set: persisted.exercises[0]!.sets[0]! }
+        }),
+        saveTimer,
+      },
+    })
+
+    const view = await adapter.open({ type: 'resume', sessionId: session.id })
+    if (view.kind !== 'repetitions') throw new Error('Expected repetitions view')
+
+    await expect(adapter.completeCurrentSet(view, {
+      repetitions: 8,
+      weight: { mode: 'external', value: 80, unit: 'kg' },
+    })).resolves.toMatchObject({
+      kind: 'duration',
+      exerciseResultId: 'result-duration',
+      activeSetNumber: 1,
+      timer: { phase: 'exercise', setNumber: 1 },
+    })
+    expect(saveTimer).toHaveBeenCalledWith(
+      session.id,
+      expect.objectContaining({
+        phase: 'exercise',
+        exerciseResultId: 'result-duration',
+        setNumber: 1,
+      }),
+    )
   })
 })
