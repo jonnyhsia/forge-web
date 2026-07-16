@@ -25,3 +25,6 @@ dev-dist
 *.sw?
 
 docs/figma-make
+
+.agents
+.claude
