@@ -412,7 +412,7 @@ export function Progress({ value, label }: { value: number; label?: string }) {
     <div className="ui-progress">
       {label ? <div className="ui-progress__label"><span>{label}</span><span>{Math.round(normalized)}%</span></div> : null}
       <div aria-label={label} aria-valuemax={100} aria-valuemin={0} aria-valuenow={normalized} className="ui-progress__track" role="progressbar">
-        <span className="ui-progress__value" style={{ width: `${normalized}%` }} />
+        <span className="ui-progress__value" style={{ transform: `scaleX(${normalized / 100})` }} />
       </div>
     </div>
   )
