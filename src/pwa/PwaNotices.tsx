@@ -61,6 +61,7 @@ export function PwaNotices({ showInstall }: { showInstall: boolean }) {
 
       <Dialog
         actions={<Button fullWidth onClick={() => setShowIosGuide(false)}>知道了</Button>}
+        className="pwa-install-sheet"
         onClose={() => setShowIosGuide(false)}
         open={showIosGuide}
         title="在 iOS 安装 Forge"
