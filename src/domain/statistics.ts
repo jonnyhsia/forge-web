@@ -163,7 +163,7 @@ function calculateStreak(completedAt: Date[], rangeEnd: Date): number {
   }
 
   let streak = 1
-  let cursor = localDate(latest)
+  const cursor = localDate(latest)
   for (const day of localDays.slice(1)) {
     cursor.setDate(cursor.getDate() - 1)
     if (day !== localDateKey(cursor)) break
