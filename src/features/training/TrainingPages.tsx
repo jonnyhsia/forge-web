@@ -388,7 +388,7 @@ function useTimerTargetReminder(
       ? browserReminderService.deliver(reminder).inAppMessage
       : reminder.body
     setMessage(inAppMessage)
-  }, [current.exerciseName, current.targetReached, key, systemReminderEnabled])
+  }, [current.exerciseName, current.kind, current.targetReached, key, systemReminderEnabled])
 
   return message
 }
