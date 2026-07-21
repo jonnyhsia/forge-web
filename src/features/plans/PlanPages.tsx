@@ -3,12 +3,14 @@ import {
   Link,
   useBeforeUnload,
   useBlocker,
+  useLocation,
   useNavigate,
   useParams,
 } from 'react-router-dom'
 import type { PlanAggregate } from '../../data'
 import type { DataError } from '../../data'
 import { createEntityId, type Weekday } from '../../domain'
+import { markNavDirection } from '../../router'
 import { useForgeStore } from '../../store'
 import {
   AnimatedNumber,
@@ -53,6 +55,12 @@ const EXERCISE_TYPES: ReadonlyArray<{ value: PlanExerciseDraft['type']; label: s
   { value: 'duration', label: '时间型' },
 ]
 
+/** 编辑页由多处入口进入，退出时回到来源；深链或刷新丢失来源时退回计划列表。 */
+function useEditorReturnPath() {
+  const { state } = useLocation()
+  return (state as { from?: string } | null)?.from ?? '/plans'
+}
+
 function dataErrorMessage(error: DataError | null) {
   if (!error) return ''
   if (error.code === 'active_session_exists') {
@@ -92,7 +100,7 @@ export function PlansPage() {
     <div className="plan-page">
       <header className="plan-page__header">
         <div><p>TRAINING LIBRARY</p><h1>训练计划</h1></div>
-        <Link aria-label="新建计划" className="round-action" to="/plans/new"><Icon name="plus" size={18} /></Link>
+        <Link aria-label="新建计划" className="round-action" onClick={() => markNavDirection('forward')} state={{ from: '/plans' }} to="/plans/new" viewTransition><Icon name="plus" size={18} /></Link>
       </header>
 
       <div className="plan-list">
@@ -106,35 +114,48 @@ export function PlansPage() {
         ) : plans.status === 'error' && plans.items.length === 0 ? (
           <StatePanel action={<Button leadingIcon="refresh" onClick={() => void loadPlans({ reset: true })}>重试</Button>} description={dataErrorMessage(plans.error)} kind="error" title="无法加载计划" />
         ) : plans.items.length === 0 ? (
-          <StatePanel action={<Link className="ui-button ui-button--primary" to="/plans/new"><Icon name="plus" size={17} />新建训练计划</Link>} description="建立第一个计划，安排每周训练。" kind="empty" title="暂无训练计划" />
+          <StatePanel action={<Link className="ui-button ui-button--primary" onClick={() => markNavDirection('forward')} state={{ from: '/plans' }} to="/plans/new" viewTransition><Icon name="plus" size={17} />新建训练计划</Link>} description="建立第一个计划，安排每周训练。" kind="empty" title="暂无训练计划" />
         ) : (
           plans.items.map((plan) => {
             const open = expanded === plan.id
             const detail = planDetails[plan.id]
+            const detailPhase = !detail || detail.status === 'loading'
+              ? 'loading'
+              : detail.status === 'error'
+                ? 'error'
+                : detail.value?.exercises.length === 0
+                  ? 'empty'
+                  : 'ready'
             return (
               <Card className="plan-card" key={plan.id}>
                 <button aria-expanded={open} className="plan-card__summary" onClick={() => togglePlan(plan.id)}>
                   <span><strong>{plan.name}</strong><small>{CATEGORY_LABELS[plan.category]} · {plan.weekdays.length} 个训练日</small></span>
                   <span className="plan-card__meta"><em>{syncLabel(plan.sync.status)}</em><Icon className={open ? 'plan-card__chevron plan-card__chevron--open' : 'plan-card__chevron'} name="chevron-right" size={17} /></span>
                 </button>
-                {open ? (
+                <div
+                  aria-hidden={!open}
+                  className={open ? 'plan-card__detail-shell plan-card__detail-shell--open' : 'plan-card__detail-shell'}
+                  inert={!open}
+                >
                   <div className="plan-card__detail">
-                    {detail?.status === 'loading' || !detail ? <p className="plan-inline-state">正在读取动作…</p> : detail.status === 'error' ? (
-                      <div className="plan-inline-error"><span>{dataErrorMessage(detail.error)}</span><Button variant="ghost" onClick={() => void loadPlan(plan.id)}>重试</Button></div>
-                    ) : detail.value ? (
-                      <>
-                        {detail.value.exercises.length === 0 ? <p className="plan-inline-state">尚未添加动作</p> : (
-                          <ol className="plan-exercise-summary">
-                            {detail.value.exercises.map(({ exercise, planExercise }) => (
-                              <li key={planExercise.id}><span>{exercise.name}</span><small>{targetSummary(planExercise.target)}</small></li>
-                            ))}
-                          </ol>
-                        )}
-                        <Link className="plan-edit-link" to={`/plans/${plan.id}`}>编辑计划<Icon name="chevron-right" size={15} /></Link>
-                      </>
-                    ) : null}
+                    <div className="plan-card__detail-state" key={detailPhase}>
+                      {detail?.status === 'loading' || !detail ? <p className="plan-inline-state">正在读取动作…</p> : detail.status === 'error' ? (
+                        <div className="plan-inline-error"><span>{dataErrorMessage(detail.error)}</span><Button variant="ghost" onClick={() => void loadPlan(plan.id)}>重试</Button></div>
+                      ) : detail.value ? (
+                        <>
+                          {detail.value.exercises.length === 0 ? <p className="plan-inline-state">尚未添加动作</p> : (
+                            <ol className="plan-exercise-summary">
+                              {detail.value.exercises.map(({ exercise, planExercise }) => (
+                                <li key={planExercise.id}><span>{exercise.name}</span><small>{targetSummary(planExercise.target)}</small></li>
+                              ))}
+                            </ol>
+                          )}
+                          <Link className="plan-edit-link" onClick={() => markNavDirection('forward')} state={{ from: '/plans' }} to={`/plans/${plan.id}`} viewTransition>编辑计划<Icon name="chevron-right" size={15} /></Link>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                ) : null}
+                </div>
               </Card>
             )
           })
@@ -157,6 +178,7 @@ export function PlanDetailPage() {
   const detail = useForgeStore((state) => state.planDetails[planId])
   const loadPlan = useForgeStore((state) => state.loadPlan)
   const defaultWeightUnit = useForgeStore((state) => state.settings.value?.defaultWeightUnit ?? 'kg')
+  const returnTo = useEditorReturnPath()
 
   useEffect(() => {
     if (planId && !detail) void loadPlan(planId)
@@ -164,8 +186,8 @@ export function PlanDetailPage() {
 
   if (!detail || detail.status === 'loading') return <div className="focused-page"><StatePanel kind="loading" title="正在加载计划" description="正在读取计划与动作。" /></div>
   if (detail.status === 'error' || !detail.value) return <div className="focused-page"><StatePanel action={<Button leadingIcon="refresh" onClick={() => void loadPlan(planId)}>重试</Button>} description={dataErrorMessage(detail.error)} kind="error" title="无法打开计划" /></div>
-  if (detail.value.plan.status === 'archived') return <div className="focused-page"><StatePanel action={<Link className="ui-button ui-button--primary" to="/plans">返回计划</Link>} description="归档计划当前为只读状态。" kind="empty" title="计划已归档" /></div>
-  if (detail.value.plan.sync.status === 'conflict') return <div className="focused-page"><StatePanel action={<Link className="ui-button ui-button--primary" to="/plans">返回计划</Link>} description="该计划存在同步冲突，处理冲突前不能编辑。" kind="error" title="计划暂时只读" /></div>
+  if (detail.value.plan.status === 'archived') return <div className="focused-page"><StatePanel action={<Link className="ui-button ui-button--primary" onClick={() => markNavDirection('back')} to={returnTo} viewTransition>返回</Link>} description="归档计划当前为只读状态。" kind="empty" title="计划已归档" /></div>
+  if (detail.value.plan.sync.status === 'conflict') return <div className="focused-page"><StatePanel action={<Link className="ui-button ui-button--primary" onClick={() => markNavDirection('back')} to={returnTo} viewTransition>返回</Link>} description="该计划存在同步冲突，处理冲突前不能编辑。" kind="error" title="计划暂时只读" /></div>
   return <PlanEditorForm aggregate={detail.value} defaultWeightUnit={defaultWeightUnit} />
 }
 
@@ -180,6 +202,7 @@ function targetSummary(target: PlanAggregate['exercises'][number]['planExercise'
 
 function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggregate; defaultWeightUnit: 'kg' | 'lb' }) {
   const navigate = useNavigate()
+  const returnTo = useEditorReturnPath()
   const savePlan = useForgeStore((state) => state.savePlan)
   const deletePlan = useForgeStore((state) => state.deletePlan)
   const plansError = useForgeStore((state) => state.plans.error)
@@ -199,7 +222,12 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const weekdayGesture = useRef<{ select: boolean; visited: Set<Weekday> } | null>(null)
+  const weekdayGesture = useRef<{
+    anchor: Weekday
+    last: Weekday | null
+    select: boolean
+    baseline: readonly Weekday[]
+  } | null>(null)
   const blocker = useBlocker(
     () =>
       !allowNavigation.current &&
@@ -242,21 +270,36 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   const saveAndClose = async () => {
     if (!(await persist())) return
     allowNavigation.current = true
-    navigate('/plans', { replace: true })
+    markNavDirection('back')
+    navigate(returnTo, { replace: true, viewTransition: true })
   }
 
+  // 按「锚点 → 当前格」的区间重算，每次都从手势开始时的快照出发，
+  // 因此回滑可以取消途中扫过的日子。
   const applyWeekdayGesture = (weekday: Weekday) => {
     const gesture = weekdayGesture.current
-    if (!gesture || gesture.visited.has(weekday)) return
-    gesture.visited.add(weekday)
-    setDraft((current) => ({ ...current, weekdays: gesture.select
-      ? [...new Set([...current.weekdays, weekday])].sort()
-      : current.weekdays.filter((day) => day !== weekday) }))
+    if (!gesture || gesture.last === weekday) return
+    gesture.last = weekday
+    const from = Math.min(gesture.anchor, weekday)
+    const to = Math.max(gesture.anchor, weekday)
+    setDraft((current) => {
+      const weekdays = new Set(gesture.baseline)
+      for (let day = from; day <= to; day += 1) {
+        if (gesture.select) weekdays.add(day as Weekday)
+        else weekdays.delete(day as Weekday)
+      }
+      return { ...current, weekdays: [...weekdays].sort() }
+    })
   }
 
   const startWeekdayGesture = (event: React.PointerEvent, weekday: Weekday) => {
     event.preventDefault()
-    weekdayGesture.current = { select: !draft.weekdays.includes(weekday), visited: new Set<Weekday>() }
+    weekdayGesture.current = {
+      anchor: weekday,
+      last: null,
+      select: !draft.weekdays.includes(weekday),
+      baseline: draft.weekdays,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
     applyWeekdayGesture(weekday)
   }
@@ -312,7 +355,8 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
     try {
       await deletePlan(draft.id)
       allowNavigation.current = true
-      navigate('/plans', { replace: true })
+      markNavDirection('back')
+      navigate(returnTo, { replace: true, viewTransition: true })
     } catch (error) {
       setSubmitError(dataErrorMessage(error as DataError))
       setDeleteOpen(false)
@@ -324,7 +368,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
   return (
     <div className="plan-editor-page">
       <header className="plan-editor-header">
-        <Link aria-label="返回计划" className="back-link" to="/plans"><Icon name="arrow-left" size={18} /></Link>
+        <Link aria-label="返回" className="back-link" onClick={() => markNavDirection('back')} to={returnTo} viewTransition><Icon name="arrow-left" size={18} /></Link>
         <div><p>{aggregate ? '编辑计划' : '新建计划'}</p><h1>{draft.name.trim() || '未命名计划'}</h1></div>
         {aggregate ? <div className="plan-editor-header__actions"><span className="plan-status-badge">{syncLabel(aggregate.plan.sync.status)}</span><button aria-label="删除计划" className="plan-delete-button" disabled={submitting} onClick={() => setDeleteOpen(true)} type="button"><Icon name="trash" size={18} /></button></div> : null}
       </header>
@@ -372,7 +416,7 @@ function PlanEditorForm({ aggregate, defaultWeightUnit }: { aggregate?: PlanAggr
 
       {editingExercise ? <ExerciseDialog exercise={editingExercise} onAfterClose={() => setEditingExercise(null)} onClose={() => setExerciseDialogOpen(false)} onDelete={() => removeExercise(editingExercise.id)} onSave={saveExercise} open={exerciseDialogOpen} /> : null}
       <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => setDeleteOpen(false)}>取消</Button><Button fullWidth variant="danger" disabled={submitting} onClick={() => void confirmDelete()}>确认删除</Button></>} onClose={() => setDeleteOpen(false)} open={deleteOpen} title="删除训练计划"><p>删除后计划将从列表隐藏，并在联网后同步删除。此操作无法撤销。</p></Dialog>
-      <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => blocker.reset?.()}>继续编辑</Button><Button fullWidth variant="ghost" onClick={() => { allowNavigation.current = true; blocker.proceed?.() }}>丢弃修改</Button></>} onClose={() => blocker.reset?.()} open={blocker.state === 'blocked' && !editingExercise && !deleteOpen} title="放弃未提交的修改？"><p>{submitError || '离开页面将丢弃未保存的修改。'}</p></Dialog>
+      <Dialog actions={<><Button fullWidth variant="secondary" onClick={() => blocker.reset?.()}>继续编辑</Button><Button fullWidth variant="ghost" onClick={() => { allowNavigation.current = true; markNavDirection('back'); blocker.proceed?.() }}>丢弃修改</Button></>} onClose={() => blocker.reset?.()} open={blocker.state === 'blocked' && !editingExercise && !deleteOpen} title="放弃未提交的修改？"><p>{submitError || '离开页面将丢弃未保存的修改。'}</p></Dialog>
     </div>
   )
 }

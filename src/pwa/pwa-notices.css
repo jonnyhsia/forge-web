@@ -40,6 +40,17 @@
   line-height: 1.6;
 }
 
+/* 底部导航（z-index 100）盖在 .ui-dialog-backdrop（z-index 30）之上，
+   因此弹层需抬到导航条上方，与 .dashboard-sync-sheet 一致。 */
+.pwa-install-sheet {
+  max-height: calc(88svh - 4.5rem - env(safe-area-inset-bottom));
+  margin-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 48rem) {
+  .pwa-install-sheet { max-height: 88svh; margin-bottom: 0; }
+}
+
 @media (max-width: 30rem) {
   .pwa-notice,
   .pwa-notice__actions { align-items: stretch; }
