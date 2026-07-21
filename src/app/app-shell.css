@@ -130,3 +130,51 @@
     display: none;
   }
 }
+
+/* 计划列表 ↔ 计划编辑器的层级转场。方向由 markNavDirection() 打在 <html> 上。 */
+@media (max-width: 47.999rem) {
+  /* 接管 UA 默认交叉淡入：plus-lighter 会让滑动重叠区异常发亮。 */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  /* 前进：编辑器从右侧盖住列表。 */
+  html[data-nav='forward']::view-transition-new(root) {
+    z-index: 1;
+    animation: plan-nav-enter-right 200ms cubic-bezier(.22, 1, .36, 1) both;
+  }
+
+  html[data-nav='forward']::view-transition-old(root) {
+    animation: plan-nav-recede-left 200ms cubic-bezier(.22, 1, .36, 1) both;
+  }
+
+  /* 后退：编辑器向右滑走，露出列表。 */
+  html[data-nav='back']::view-transition-old(root) {
+    z-index: 1;
+    animation: plan-nav-exit-right 200ms cubic-bezier(.22, 1, .36, 1) both;
+  }
+
+  html[data-nav='back']::view-transition-new(root) {
+    animation: plan-nav-advance-left 200ms cubic-bezier(.22, 1, .36, 1) both;
+  }
+}
+
+@keyframes plan-nav-enter-right { from { transform: translateX(100%); } }
+@keyframes plan-nav-recede-left { to { transform: translateX(-22%); opacity: .6; } }
+@keyframes plan-nav-exit-right { to { transform: translateX(100%); } }
+@keyframes plan-nav-advance-left { from { transform: translateX(-22%); opacity: .6; } }
+
+/* 桌面端与 Dialog 一致，主动禁用进退场；否则会退回 UA 默认全页交叉淡入。 */
+@media (min-width: 48rem) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; }
+}

@@ -74,7 +74,8 @@
 | 目标重量“自重 / 数字”切换 | 基础 `140ms`；显示自重时延迟 `180ms`、时长 `750ms` | `ease-out` | 两层内容交叉淡入淡出 | `src/features/plans/plan-editor-enhancements.css` |
 | Loading Spinner | `800ms`，无限循环 | `linear` | `@keyframes ui-spin` 旋转 | `src/ui/ui.css` |
 | Dashboard 日期跳转 | 浏览器控制，未定义固定时长 | 浏览器控制 | `scrollIntoView({ behavior: 'smooth' })` | `src/pages/ShellPages.tsx` |
-| 页面路由切换 | 无 | 无 | React Router 直接替换页面，未设置页面级 Transition | `src/router/router.tsx` |
+| 计划列表 ↔ 计划编辑器 | `200ms`，仅 `max-width: 47.999rem` | `cubic-bezier(.22, 1, .36, 1)` | View Transitions API 水平推入 / 推出；方向由 `<html data-nav>` 区分；桌面端与 Reduced Motion 均硬切 | `src/app/app-shell.css`、`src/router/nav-direction.ts` |
+| 其余页面路由切换 | 无 | 无 | React Router 直接替换页面，未设置页面级 Transition | `src/router/router.tsx` |
 
 Reduced Motion 当前覆盖 `--motion-fast`、Segmented Control、Dialog 和目标重量切换。`AnimatedNumber` 在项目代码层未显式接入 Reduced Motion 分支；新增动画应至少提供同等降级。当前没有通用 Dropdown 或 Drawer 组件，因此也没有对应的共享展开动画。
 

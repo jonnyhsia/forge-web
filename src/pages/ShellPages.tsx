@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatedNumber, Button, Card, Dialog, Progress, SegmentedControl, StatePanel } from '../ui/primitives'
 import { Icon, type IconName } from '../ui/Icon'
+import { markNavDirection } from '../router'
 import { useForgeStore } from '../store'
 import {
   rollingEightWeekRange,
@@ -256,7 +257,13 @@ function DashboardWorkoutCard({ occurrence }: { occurrence: DashboardOccurrence 
           <div className="dashboard-workout__controls">
             <span>{status}</span>
             {occurrence.status === 'planned' ? (
-              <Link aria-label={`编辑${occurrence.planName}`} to={`/plans/${occurrence.planId}`}>
+              <Link
+                aria-label={`编辑${occurrence.planName}`}
+                onClick={() => markNavDirection('forward')}
+                state={{ from: '/' }}
+                to={`/plans/${occurrence.planId}`}
+                viewTransition
+              >
                 <Icon name="more-horizontal" size={15} />
               </Link>
             ) : null}
